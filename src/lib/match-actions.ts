@@ -73,20 +73,20 @@ export async function openNextMatch(opts: {
     const inserted = await db
       .insert(matches)
       .values({
-        groupId: opts.groupId,
-        matchDate: opts.matchDate,
+        groupId: targetGroupId,
+        matchDate,
         signupOpensAt: opensAt,
         signupClosesAt: closesAt,
         status: "open",
-        capacity: opts.capacity,
-        format: opts.format ?? "F5",
+        capacity,
+        format,
       })
       .returning();
     match = inserted[0]!;
   }
 
   if (opts.notify !== false) {
-    const dateStr = formatArt(opts.matchDate, "EEEE dd/MM 'a las' HH:mm");
+    const dateStr = formatArt(matchDate, "EEEE dd/MM 'a las' HH:mm");
     await pushToAll({
       title: "¡Se abrió la lista! ⚽",
       body: `Anotate para el ${dateStr}.`,
