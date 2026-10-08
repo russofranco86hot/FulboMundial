@@ -1,0 +1,155 @@
+"use client";
+
+import React, { useRef, useState } from "react";
+import { motion } from "framer-motion";
+import { Share2 } from "lucide-react";
+import { toBlob } from "html-to-image";
+
+type Player = { id: number; name: string; isGoalkeeper: boolean; isGuest: boolean };
+
+// Posiciones iniciales para 5 jugadores (1-1-2-1)
+// Valores en porcentaje respecto al contenedor de la cancha.
+const DEFAULT_POSITIONS = [
+  { top: "85%", left: "50%" }, // 0: Arquero (Abajo al centro)
+  { top: "65%", left: "50%" }, // 1: Defensa (Abajo central)
+  { top: "40%", left: "20%" }, // 2: Medio Izquierdo
+  { top: "40%", left: "80%" }, // 3: Medio Derecho
+  { top: "15%", left: "50%" }, // 4: Delantero (Arriba al centro)
+];
+
+export function Pitch({
+  teamName,
+  color,
+  players,
+}: {
+  teamName: string;
+  color: "claro" | "oscuro";
+  players: Player[];
+}) {
+  const pitchRef = useRef<HTMLDivElement>(null);
+  const [sharing, setSharing] = useState(false);
+
+  // Ordenar para intentar poner al arquero primero si existe, y los demás después.
+  const sortedPlayers = [...players].sort((a, b) => {
+    if (a.isGoalkeeper && !b.isGoalkeeper) return -1;
+    if (!a.isGoalkeeper && b.isGoalkeeper) return 1;
+    return 0;
+  });
+
+  const handleShare = async () => {
+    if (!pitchRef.current) return;
+    try {
+      setSharing(true);
+      const { toBlob } = await import("html-to-image");
+      const blob = await toBlob(pitchRef.current, {
+        quality: 1,
+        pixelRatio: 2,
+        cacheBust: true,
+        backgroundColor: pitchBg,
+      });
+      if (!blob) return;
+
+      const file = new File([blob], `tactica-${teamName.toLowerCase().replace(" ", "-")}.png`, { type: "image/png" });
+      
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: teamName,
+          files: [file],
+        });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.download = file.name;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("Error al compartir la imagen", err);
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const bgColor = color === "claro" ? "bg-white text-pitch-900 border-pitch-200" : "bg-zinc-800 text-white border-zinc-600";
+  const pitchBg = "#15803d"; // bg-green-700 in hex for html-to-image bg
+
+  return (
+    <div className="card space-y-3 p-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold text-lg">{teamName}</h3>
+        <button
+          onClick={handleShare}
+          disabled={sharing}
+          className="btn-ghost py-1.5 px-3 text-xs gap-1.5"
+        >
+          <Share2 size={14} />
+          {sharing ? "Generando..." : "Compartir"}
+        </button>
+      </div>
+      
+      <p className="text-[11px] text-pitch-900/50 dark:text-zinc-400 leading-tight">
+        * Arrastra los jugadores por la cancha para armar la táctica antes de exportar.
+      </p>
+
+      {/* Cancha de fútbol */}
+      <div 
+        ref={pitchRef}
+        style={{ background: "repeating-linear-gradient(to bottom, #15803d 0px, #15803d 40px, #166534 40px, #166534 80px)" }}
+        className={`relative w-full aspect-[3/4] rounded-lg border-2 border-white/60 overflow-hidden shadow-inner flex flex-col`}
+      >
+        {/* Marca de agua / Título en la imagen exportada */}
+        <div className="absolute top-2 left-0 w-full text-center opacity-50 pointer-events-none">
+          <span className="text-white/80 font-black tracking-widest uppercase text-base">{teamName}</span>
+        </div>
+
+        {/* Líneas de la cancha */}
+        <div className="absolute inset-0 pointer-events-none">
+          {/* Línea central */}
+          <div className="absolute top-1/2 left-0 w-full h-[3px] bg-white/60 -translate-y-1/2" />
+          {/* Círculo central */}
+          <div className="absolute top-1/2 left-1/2 w-24 h-24 border-[3px] border-white/60 rounded-full -translate-x-1/2 -translate-y-1/2" />
+          {/* Punto central */}
+          <div className="absolute top-1/2 left-1/2 w-1.5 h-1.5 bg-white/60 rounded-full -translate-x-1/2 -translate-y-1/2" />
+          
+          {/* Área superior */}
+          <div className="absolute top-0 left-1/2 w-1/2 h-1/6 border-x-[3px] border-b-[3px] border-white/60 -translate-x-1/2" />
+          {/* Semicírculo área superior */}
+          <div className="absolute top-[16.666%] left-1/2 w-12 h-6 border-b-[3px] border-x-[3px] border-white/60 rounded-b-full -translate-x-1/2" />
+          
+          {/* Área inferior */}
+          <div className="absolute bottom-0 left-1/2 w-1/2 h-1/6 border-x-[3px] border-t-[3px] border-white/60 -translate-x-1/2" />
+          {/* Semicírculo área inferior */}
+          <div className="absolute bottom-[16.666%] left-1/2 w-12 h-6 border-t-[3px] border-x-[3px] border-white/60 rounded-t-full -translate-x-1/2" />
+        </div>
+
+        {/* Fichas de jugadores */}
+        {sortedPlayers.map((p, i) => {
+          // Si hay más de 5 jugadores, los apilamos abajo.
+          const pos = i < 5 ? DEFAULT_POSITIONS[i] : { top: "90%", left: `${20 + (i - 5) * 20}%` };
+          
+          return (
+            <motion.div
+              key={p.id}
+              drag
+              dragConstraints={pitchRef}
+              dragElastic={0}
+              dragMomentum={false}
+              initial={{ top: pos.top, left: pos.left, x: "-50%", y: "-50%" }}
+              className={`absolute cursor-grab active:cursor-grabbing flex flex-col items-center justify-center gap-1 z-10`}
+            >
+              {/* Círculo de la ficha */}
+              <div className={`w-10 h-10 rounded-full border-2 ring-2 ring-white/50 shadow-lg flex items-center justify-center text-sm font-bold ${bgColor}`}>
+                {p.isGoalkeeper ? "🧤" : p.name.substring(0, 1).toUpperCase()}
+              </div>
+              {/* Nombre debajo de la ficha */}
+              <div className="bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap font-medium backdrop-blur-sm shadow-md">
+                {p.name}
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

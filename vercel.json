@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/open-signups",
+      "schedule": "0 2 * * 4"
+    },
+    {
+      "path": "/api/cron/close-signups",
+      "schedule": "0 15 * * 3"
+    },
+    {
+      "path": "/api/cron/match-reminder",
+      "schedule": "0 21 * * 3"
+    }
+  ]
+}
