@@ -42,11 +42,15 @@ export async function actionRequestJoin(formData: FormData) {
   if (!player) throw new Error("No autenticado");
 
   const code = String(formData.get("code") || "").trim().toUpperCase();
-  if (!code) return { error: "Ingresá el código de invitación" };
+  if (!code) {
+    redirect(`/grupos/unirse?error=${encodeURIComponent("Ingresá el código de invitación")}`);
+  }
 
   const { getGroupByInviteCode, hasExistingRequest } = await import("@/lib/groups");
   const group = await getGroupByInviteCode(code);
-  if (!group) return { error: "Código inválido. Revisá que esté bien escrito." };
+  if (!group) {
+    redirect(`/grupos/unirse?error=${encodeURIComponent("Código inválido. Revisá que esté bien escrito.")}&code=${encodeURIComponent(code)}`);
+  }
 
   // Ya es miembro activo
   const existing = await db
@@ -60,7 +64,9 @@ export async function actionRequestJoin(formData: FormData) {
 
   // Ya tiene solicitud
   const already = await hasExistingRequest(group.id, player.id);
-  if (already) return { error: "Ya tenés una solicitud pendiente para este grupo." };
+  if (already) {
+    redirect(`/grupos/unirse?error=${encodeURIComponent("Ya tenés una solicitud pendiente para este grupo.")}`);
+  }
 
   await db.insert(joinRequests).values({
     groupId: group.id,
