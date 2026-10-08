@@ -38,8 +38,10 @@ export async function adminOpenGroupMatch(formData: FormData) {
   if (dateRaw) {
     matchDate = new Date(dateRaw);
   } else {
-    // 7 días adelante por defecto
-    matchDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const { groups } = await import("@/db/schema");
+    const { nextGroupMatchDate } = await import("@/lib/time");
+    const grp = (await db.select().from(groups).where(eq(groups.id, groupId)).limit(1))[0];
+    matchDate = nextGroupMatchDate(grp?.defaultDayOfWeek ?? 3, grp?.defaultTime ?? "21:00");
   }
 
   const capacity = Number(formData.get("capacity")) || 10;
@@ -380,5 +382,65 @@ export async function adminGroupSetStars(formData: FormData) {
   const stars = String(formData.get("stars") ?? "0");
   if (!id) return;
   await db.update(players).set({ stars }).where(eq(players.id, id));
+  refreshGroup(groupSlug);
+}
+
+export async function adminGroupAddExistingPlayerAsMember(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  const playerId = Number(formData.get("playerId"));
+  if (!playerId) return;
+
+  const { groupMembers } = await import("@/db/schema");
+  await db
+    .insert(groupMembers)
+    .values({
+      groupId,
+      playerId,
+      role: "member",
+      status: "active",
+    })
+    .onConflictDoUpdate({
+      target: [groupMembers.groupId, groupMembers.playerId],
+      set: { status: "active" },
+    });
+
+  refreshGroup(groupSlug);
+}
+
+export async function adminGroupCreateAndAddMember(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  const name = String(formData.get("name") || "").trim();
+  if (!name) return;
+  const stars = String(formData.get("stars") || "3");
+  const isGoalkeeper = formData.get("isGoalkeeper") === "on";
+  const email = (String(formData.get("email") || "").trim() || null) as string | null;
+
+  const inserted = await db
+    .insert(players)
+    .values({
+      name,
+      stars,
+      isGoalkeeper,
+      isGuest: false,
+      isHistorico: false,
+      priorityOrder: 99,
+      email,
+    })
+    .returning();
+
+  const { groupMembers } = await import("@/db/schema");
+  await db.insert(groupMembers).values({
+    groupId,
+    playerId: inserted[0].id,
+    role: "member",
+    status: "active",
+  });
+
   refreshGroup(groupSlug);
 }

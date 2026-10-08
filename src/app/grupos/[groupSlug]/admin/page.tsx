@@ -1,6 +1,6 @@
 import { getGroupBySlug, countPendingRequests } from "@/lib/groups";
 import { getCurrentMatch, getSelection } from "@/lib/queries";
-import { formatArt } from "@/lib/time";
+import { formatArt, nextGroupMatchDate } from "@/lib/time";
 import { adminOpenGroupMatch, adminCloseGroupMatch, adminReopenGroupMatch } from "./actions";
 import { Calendar, Users, PlusCircle, Lock, Unlock, Copy, UserCheck } from "lucide-react";
 import Link from "next/link";
@@ -22,6 +22,7 @@ export default async function GroupAdminHome({
   const playing = selection.filter((s) => s.status === "playing").length;
   const subs = selection.filter((s) => s.status === "substitute").length;
   const pendingRequests = await countPendingRequests(group.id);
+  const nextDate = nextGroupMatchDate(group.defaultDayOfWeek ?? 3, group.defaultTime ?? "21:00");
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -97,10 +98,11 @@ export default async function GroupAdminHome({
         <form action={adminOpenGroupMatch}>
           <input type="hidden" name="groupId" value={group.id} />
           <input type="hidden" name="groupSlug" value={group.slug} />
+          <input type="hidden" name="matchDate" value={nextDate.toISOString()} />
           <input type="hidden" name="capacity" value={group.defaultCapacity} />
           <input type="hidden" name="format" value={group.format} />
           <button className="btn-primary w-full flex items-center justify-center gap-2">
-            <PlusCircle size={18} /> Abrir próximo partido
+            <PlusCircle size={18} /> Abrir próximo partido ({formatArt(nextDate, "EEE dd/MM HH:mm")})
           </button>
         </form>
 

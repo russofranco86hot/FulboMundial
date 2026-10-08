@@ -1,6 +1,6 @@
 import { getGroupBySlug } from "@/lib/groups";
 import { getCurrentMatch, getSelection, getMatchTeams, getGroupPlayers } from "@/lib/queries";
-import { formatArt } from "@/lib/time";
+import { formatArt, nextGroupMatchDate } from "@/lib/time";
 import { waListMessage, waTeamsMessage } from "@/lib/whatsapp";
 import {
   adminOpenGroupMatch,
@@ -29,6 +29,9 @@ export default async function GroupAdminPartido({
   const match = await getCurrentMatch(group.id);
 
   if (!match) {
+    const nextDate = nextGroupMatchDate(group.defaultDayOfWeek ?? 3, group.defaultTime ?? "21:00");
+    const defaultDateStr = formatArt(nextDate, "yyyy-MM-dd'T'HH:mm");
+
     return (
       <div className="card space-y-4 text-center py-8 animate-fade-in">
         <div className="w-16 h-16 bg-pitch-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-2">
@@ -43,7 +46,13 @@ export default async function GroupAdminPartido({
             <label className="block text-xs font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">
               Fecha y hora
             </label>
-            <input type="datetime-local" name="matchDate" className="input w-full" required />
+            <input
+              type="datetime-local"
+              name="matchDate"
+              defaultValue={defaultDateStr}
+              className="input w-full"
+              required
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-2">

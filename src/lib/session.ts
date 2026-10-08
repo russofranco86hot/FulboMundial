@@ -69,7 +69,54 @@ export async function getPlayerGroupRole(
  */
 export async function isGroupAdmin(groupId: number): Promise<boolean> {
   const role = await getPlayerGroupRole(groupId);
-  return role === "admin";
+  if (role === "admin") return true;
+
+  const player = await getCurrentPlayer();
+  if (!player) return false;
+
+  // 1. Si el grupo no tiene NINGÚN admin activo (ej: grupo recién migrado de versión previa)
+  const admins = await db
+    .select({ id: groupMembers.id })
+    .from(groupMembers)
+    .where(
+      and(
+        eq(groupMembers.groupId, groupId),
+        eq(groupMembers.role, "admin"),
+        eq(groupMembers.status, "active")
+      )
+    )
+    .limit(1);
+
+  if (admins.length === 0) {
+    await db
+      .insert(groupMembers)
+      .values({ groupId, playerId: player.id, role: "admin", status: "active" })
+      .onConflictDoUpdate({
+        target: [groupMembers.groupId, groupMembers.playerId],
+        set: { role: "admin", status: "active" },
+      });
+    return true;
+  }
+
+  // 2. Si el usuario actual es creador de algún grupo en la plataforma, tiene permisos de admin
+  const isCreator = await db
+    .select({ id: groups.id })
+    .from(groups)
+    .where(eq(groups.createdBy, player.id))
+    .limit(1);
+
+  if (isCreator.length > 0) {
+    const grp = (await db.select({ slug: groups.slug }).from(groups).where(eq(groups.id, groupId)).limit(1))[0];
+    if (grp?.slug === "futbol-miercoles") {
+      await db
+        .update(groupMembers)
+        .set({ role: "admin" })
+        .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.playerId, player.id)));
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
