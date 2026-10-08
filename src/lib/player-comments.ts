@@ -19,8 +19,10 @@ export async function ensurePlayerCommentsTable() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         match_id INTEGER REFERENCES matches(id) ON DELETE SET NULL,
         CONSTRAINT group_player_comments_uniq UNIQUE (group_id, player_id)
-      );
-      CREATE INDEX IF NOT EXISTS group_player_comments_group_idx ON group_player_comments(group_id);
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS group_player_comments_group_idx ON group_player_comments(group_id)
     `);
     tableChecked = true;
   } catch (err) {
@@ -120,16 +122,20 @@ export type PlayerCommentItem = {
 export async function getPlayerComment(groupId: number, playerId: number): Promise<string> {
   await ensurePlayerCommentsTable();
 
-  const saved = (
-    await db.execute(sql`
+  let savedComment: string | undefined;
+  try {
+    const res = await db.execute(sql`
       SELECT comment FROM group_player_comments
       WHERE group_id = ${groupId} AND player_id = ${playerId}
       LIMIT 1
-    `)
-  ).rows[0] as { comment?: string } | undefined;
+    `);
+    savedComment = (res.rows[0] as { comment?: string } | undefined)?.comment;
+  } catch (err) {
+    console.warn("Could not read from group_player_comments, using dynamic default:", err);
+  }
 
-  if (saved?.comment) {
-    return saved.comment;
+  if (savedComment) {
+    return savedComment;
   }
 
   // Generar comentario por defecto
@@ -171,7 +177,7 @@ export async function getPlayerComment(groupId: number, playerId: number): Promi
       SET comment = ${comment}, updated_at = NOW()
     `);
   } catch (e) {
-    console.error("Error saving initial player comment:", e);
+    console.warn("Could not save initial player comment:", e);
   }
 
   return comment;
@@ -190,13 +196,17 @@ export async function getAllGroupPlayerComments(groupId: number): Promise<Player
   const statsMap = new Map(standings.map((s, i) => [s.playerId, { standing: s, rank: i + 1 }]));
   const streakMap = new Map(advStats.streaks.map((s) => [s.playerId, s]));
 
-  const savedRows = (
-    await db.execute(sql`
+  let savedRows: { player_id: number; comment: string; updated_at: string }[] = [];
+  try {
+    const res = await db.execute(sql`
       SELECT player_id, comment, updated_at
       FROM group_player_comments
       WHERE group_id = ${groupId}
-    `)
-  ).rows as { player_id: number; comment: string; updated_at: string }[];
+    `);
+    savedRows = res.rows as { player_id: number; comment: string; updated_at: string }[];
+  } catch (err) {
+    console.warn("Could not read all group_player_comments:", err);
+  }
 
   const savedMap = new Map(savedRows.map((r) => [Number(r.player_id), r]));
 
@@ -259,12 +269,16 @@ export async function savePlayerComment(
   comment: string
 ) {
   await ensurePlayerCommentsTable();
-  await db.execute(sql`
-    INSERT INTO group_player_comments (group_id, player_id, comment, updated_at)
-    VALUES (${groupId}, ${playerId}, ${comment}, NOW())
-    ON CONFLICT (group_id, player_id) DO UPDATE
-    SET comment = ${comment}, updated_at = NOW()
-  `);
+  try {
+    await db.execute(sql`
+      INSERT INTO group_player_comments (group_id, player_id, comment, updated_at)
+      VALUES (${groupId}, ${playerId}, ${comment}, NOW())
+      ON CONFLICT (group_id, player_id) DO UPDATE
+      SET comment = ${comment}, updated_at = NOW()
+    `);
+  } catch (err) {
+    console.error("Error saving player comment:", err);
+  }
 }
 
 /**
@@ -274,32 +288,37 @@ export async function savePlayerComment(
 export async function regenerateAllGroupComments(groupId: number, matchId?: number) {
   await ensurePlayerCommentsTable();
 
-  const members = await getGroupMembers(groupId);
-  const standings = await getStandings(groupId);
-  const advStats = await getAdvancedStats(groupId);
+  try {
+    const members = await getGroupMembers(groupId);
+    const standings = await getStandings(groupId);
+    const advStats = await getAdvancedStats(groupId);
 
-  const statsMap = new Map(standings.map((s, i) => [s.playerId, { standing: s, rank: i + 1 }]));
-  const streakMap = new Map(advStats.streaks.map((s) => [s.playerId, s]));
+    const statsMap = new Map(standings.map((s, i) => [s.playerId, { standing: s, rank: i + 1 }]));
+    const streakMap = new Map(advStats.streaks.map((s) => [s.playerId, s]));
 
-  for (const m of members) {
-    const sInfo = statsMap.get(m.playerId);
-    const streak = streakMap.get(m.playerId);
+    for (const m of members) {
+      const sInfo = statsMap.get(m.playerId);
+      const streak = streakMap.get(m.playerId);
 
-    const comment = computeDefaultPlayerComment({
-      playerName: m.name,
-      isGoalkeeper: m.isGoalkeeper,
-      standing: sInfo?.standing,
-      rank: sInfo?.rank,
-      totalRanked: standings.length,
-      winStreak: streak?.type === "win" ? streak.count : 0,
-      winlessStreak: streak?.type === "winless" ? streak.count : 0,
-    });
+      const comment = computeDefaultPlayerComment({
+        playerName: m.name,
+        isGoalkeeper: m.isGoalkeeper,
+        standing: sInfo?.standing,
+        rank: sInfo?.rank,
+        totalRanked: standings.length,
+        winStreak: streak?.type === "win" ? streak.count : 0,
+        winlessStreak: streak?.type === "winless" ? streak.count : 0,
+      });
 
-    await db.execute(sql`
-      INSERT INTO group_player_comments (group_id, player_id, comment, updated_at, match_id)
-      VALUES (${groupId}, ${m.playerId}, ${comment}, NOW(), ${matchId ?? null})
-      ON CONFLICT (group_id, player_id) DO UPDATE
-      SET comment = ${comment}, updated_at = NOW(), match_id = ${matchId ?? null}
-    `);
+      await db.execute(sql`
+        INSERT INTO group_player_comments (group_id, player_id, comment, updated_at, match_id)
+        VALUES (${groupId}, ${m.playerId}, ${comment}, NOW(), ${matchId ?? null})
+        ON CONFLICT (group_id, player_id) DO UPDATE
+        SET comment = ${comment}, updated_at = NOW(), match_id = ${matchId ?? null}
+      `);
+    }
+  } catch (err) {
+    console.error("Error regenerating all group comments:", err);
   }
 }
+
