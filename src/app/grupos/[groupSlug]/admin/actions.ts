@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, players, matches, signups, teams, results, attendanceLog } from "@/db";
 import { requireGroupAdmin } from "@/lib/session";
 import { getCurrentMatch, getStandings } from "@/lib/queries";
