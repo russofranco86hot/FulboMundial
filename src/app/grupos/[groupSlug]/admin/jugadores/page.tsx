@@ -207,41 +207,71 @@ export default async function GroupAdminJugadores({
                 </div>
               </div>
 
-              {/* Formulario rápido para editar estrellas y arquero */}
-              <form action={adminGroupUpdatePlayer} className="flex items-center gap-3 pt-1 border-t border-pitch-50 dark:border-zinc-800 text-xs">
+              {/* Formulario para editar nombre, correo, estrellas y arquero */}
+              <form action={adminGroupUpdatePlayer} className="space-y-2 pt-2 border-t border-pitch-100/60 dark:border-zinc-800 text-xs">
                 <input type="hidden" name="groupId" value={group.id} />
                 <input type="hidden" name="groupSlug" value={group.slug} />
                 <input type="hidden" name="id" value={m.playerId} />
-                <input type="hidden" name="name" value={m.name} />
-                <input type="hidden" name="email" value={m.email ?? ""} />
                 {m.isHistorico && <input type="hidden" name="isHistorico" value="on" />}
 
-                <div className="flex items-center gap-1.5">
-                  <span className="text-pitch-900/60 dark:text-zinc-400">Estrellas:</span>
-                  <input
-                    type="number"
-                    name="stars"
-                    step="0.5"
-                    min="0"
-                    max="5"
-                    defaultValue={Number(m.stars)}
-                    className="input w-16 py-1 px-2 text-center text-xs"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-pitch-900/60 dark:text-zinc-400 mb-0.5">
+                      Nombre o apodo:
+                    </label>
+                    <input
+                      name="name"
+                      defaultValue={m.name}
+                      className="input w-full py-1.5 px-2 text-xs"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-pitch-900/60 dark:text-zinc-400 mb-0.5">
+                      Correo electrónico:
+                    </label>
+                    <input
+                      type="email"
+                      name="email"
+                      defaultValue={m.email ?? ""}
+                      placeholder="Sin correo vinculado"
+                      className="input w-full py-1.5 px-2 text-xs"
+                    />
+                  </div>
                 </div>
 
-                <label className="flex items-center gap-1 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="isGoalkeeper"
-                    defaultChecked={m.isGoalkeeper}
-                    className="rounded"
-                  />
-                  <span className="text-pitch-900/70 dark:text-zinc-400">🧤 Arquero</span>
-                </label>
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-pitch-900/60 dark:text-zinc-400">Nivel:</span>
+                      <input
+                        type="number"
+                        name="stars"
+                        step="0.5"
+                        min="0"
+                        max="5"
+                        defaultValue={Number(m.stars)}
+                        className="input w-16 py-1 px-2 text-center text-xs"
+                      />
+                      <span className="text-xs">⭐</span>
+                    </div>
 
-                <button type="submit" className="btn-ghost ml-auto text-xs py-1 px-2">
-                  Guardar
-                </button>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="isGoalkeeper"
+                        defaultChecked={m.isGoalkeeper}
+                        className="rounded"
+                      />
+                      <span className="text-pitch-900/70 dark:text-zinc-400">🧤 Arquero</span>
+                    </label>
+                  </div>
+
+                  <button type="submit" className="btn-primary text-xs py-1 px-3">
+                    Guardar
+                  </button>
+                </div>
               </form>
             </div>
           ))}

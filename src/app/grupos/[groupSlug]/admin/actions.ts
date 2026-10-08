@@ -368,15 +368,19 @@ export async function adminGroupUpdatePlayer(formData: FormData) {
 
   const id = Number(formData.get("id"));
   if (!id) return;
+  const name = String(formData.get("name") || "").trim();
+  const rawEmail = String(formData.get("email") || "").trim();
+  const email = rawEmail ? rawEmail.toLowerCase() : null;
   const stars = String(formData.get("stars") ?? "0");
+
   await db
     .update(players)
     .set({
-      name: String(formData.get("name") || "").trim(),
+      ...(name ? { name } : {}),
       stars,
       isHistorico: formData.get("isHistorico") === "on",
       isGoalkeeper: formData.get("isGoalkeeper") === "on",
-      email: (String(formData.get("email") || "").trim() || null) as string | null,
+      email,
     })
     .where(eq(players.id, id));
   refreshGroup(groupSlug);
