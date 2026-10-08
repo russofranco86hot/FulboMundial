@@ -1,7 +1,7 @@
 import "server-only";
 import { auth } from "@/auth";
 import { db, players, groupMembers, groups, type Player, type Group } from "@/db";
-import { eq, or, and } from "drizzle-orm";
+import { eq, or, and, sql } from "drizzle-orm";
 
 export type SessionUser = {
   name?: string | null;
@@ -18,8 +18,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
 /**
  * Resuelve el `Player` vinculado al usuario logueado.
- * Busca primero por google_id; si no, por email (vínculo "blando" hasta que el
- * admin lo confirme). Devuelve null si todavía no está vinculado.
+ * Busca primero por google_id; si no, por email (insensible a mayúsculas/minúsculas).
+ * Si coincide por email y no tenía googleId guardado, lo vincula automáticamente.
  */
 export async function getCurrentPlayer(): Promise<Player | null> {
   const user = await getSessionUser();
@@ -27,7 +27,7 @@ export async function getCurrentPlayer(): Promise<Player | null> {
 
   const conds = [];
   if (user.googleId) conds.push(eq(players.googleId, user.googleId));
-  if (user.email) conds.push(eq(players.email, user.email));
+  if (user.email) conds.push(sql`lower(${players.email}) = ${user.email.toLowerCase().trim()}`);
   if (conds.length === 0) return null;
 
   const rows = await db
@@ -36,7 +36,13 @@ export async function getCurrentPlayer(): Promise<Player | null> {
     .where(conds.length === 1 ? conds[0] : or(...conds))
     .limit(1);
 
-  return rows[0] ?? null;
+  const player = rows[0] ?? null;
+  if (player && user.googleId && !player.googleId) {
+    await db.update(players).set({ googleId: user.googleId }).where(eq(players.id, player.id));
+    player.googleId = user.googleId;
+  }
+
+  return player;
 }
 
 /**

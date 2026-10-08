@@ -385,31 +385,6 @@ export async function adminGroupSetStars(formData: FormData) {
   refreshGroup(groupSlug);
 }
 
-export async function adminGroupAddExistingPlayerAsMember(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const playerId = Number(formData.get("playerId"));
-  if (!playerId) return;
-
-  const { groupMembers } = await import("@/db/schema");
-  await db
-    .insert(groupMembers)
-    .values({
-      groupId,
-      playerId,
-      role: "member",
-      status: "active",
-    })
-    .onConflictDoUpdate({
-      target: [groupMembers.groupId, groupMembers.playerId],
-      set: { status: "active" },
-    });
-
-  refreshGroup(groupSlug);
-}
-
 export async function adminGroupCreateAndAddMember(formData: FormData) {
   const groupId = Number(formData.get("groupId"));
   const groupSlug = String(formData.get("groupSlug"));
@@ -417,30 +392,65 @@ export async function adminGroupCreateAndAddMember(formData: FormData) {
 
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
+  const rawEmail = String(formData.get("email") || "").trim();
+  const email = rawEmail ? rawEmail.toLowerCase() : null;
   const stars = String(formData.get("stars") || "3");
   const isGoalkeeper = formData.get("isGoalkeeper") === "on";
-  const email = (String(formData.get("email") || "").trim() || null) as string | null;
-
-  const inserted = await db
-    .insert(players)
-    .values({
-      name,
-      stars,
-      isGoalkeeper,
-      isGuest: false,
-      isHistorico: false,
-      priorityOrder: 99,
-      email,
-    })
-    .returning();
 
   const { groupMembers } = await import("@/db/schema");
-  await db.insert(groupMembers).values({
-    groupId,
-    playerId: inserted[0].id,
-    role: "member",
-    status: "active",
-  });
+
+  let targetPlayerId: number | null = null;
+
+  // Si se ingresó correo, buscar si ya existe un jugador registrado con ese correo
+  if (email) {
+    const existing = (
+      await db
+        .select({ id: players.id })
+        .from(players)
+        .where(sql`lower(${players.email}) = ${email}`)
+        .limit(1)
+    )[0];
+    if (existing) {
+      targetPlayerId = existing.id;
+    }
+  }
+
+  if (targetPlayerId) {
+    // Ya existe: vincular como miembro activo de este grupo sin duplicar registro
+    await db
+      .insert(groupMembers)
+      .values({
+        groupId,
+        playerId: targetPlayerId,
+        role: "member",
+        status: "active",
+      })
+      .onConflictDoUpdate({
+        target: [groupMembers.groupId, groupMembers.playerId],
+        set: { status: "active" },
+      });
+  } else {
+    // No existe: crear jugador con nombre y correo, y sumarlo al grupo
+    const inserted = await db
+      .insert(players)
+      .values({
+        name,
+        stars,
+        isGoalkeeper,
+        isGuest: false,
+        isHistorico: false,
+        priorityOrder: 99,
+        email,
+      })
+      .returning();
+
+    await db.insert(groupMembers).values({
+      groupId,
+      playerId: inserted[0].id,
+      role: "member",
+      status: "active",
+    });
+  }
 
   refreshGroup(groupSlug);
 }

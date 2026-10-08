@@ -374,33 +374,6 @@ export async function getUnclaimedGroupPlayers(groupId: number) {
     .orderBy(players.priorityOrder, players.name);
 }
 
-/** Jugadores registrados que NO pertenecen a este grupo todavía. */
-export async function getNonGroupPlayers(groupId: number) {
-  const { groupMembers } = await import("@/db/schema");
-  const memberIds = (
-    await db
-      .select({ playerId: groupMembers.playerId })
-      .from(groupMembers)
-      .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.status, "active")))
-  ).map((m) => m.playerId);
-
-  return db
-    .select({
-      id: players.id,
-      name: players.name,
-      stars: players.stars,
-      isGoalkeeper: players.isGoalkeeper,
-    })
-    .from(players)
-    .where(
-      and(
-        eq(players.isGuest, false),
-        memberIds.length > 0 ? sql`${players.id} NOT IN (${sql.join(memberIds, sql`, `)})` : sql`1=1`
-      )
-    )
-    .orderBy(players.name);
-}
-
 export async function getRecentMatches(groupId?: number, limitN = 5) {
   let targetGroupId = groupId;
   if (!targetGroupId) {
