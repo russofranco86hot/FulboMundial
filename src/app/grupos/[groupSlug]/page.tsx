@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getGroupBySlug } from "@/lib/groups";
 import { getCurrentPlayer } from "@/lib/session";
 import { getCurrentMatch, getSelection, getStandings, getLastFinishedMatch } from "@/lib/queries";
+import { getPlayerComment } from "@/lib/player-comments";
 import { formatArt } from "@/lib/time";
 import { Countdown } from "@/components/countdown";
 import { SignupButton } from "@/components/signup-button";
@@ -23,18 +24,28 @@ export default async function GroupHomePage({
   if (!group) return notFound();
 
   const player = await getCurrentPlayer();
+  if (!player) return null; // Layout ya maneja el acceso
+
   const standings = await getStandings(group.id);
   const topPts = standings[0]?.pts ?? 0;
   const topPlayers = standings.filter((s) => s.pts === topPts && s.pts > 0);
   const lastFinished = await getLastFinishedMatch(group.id);
-
-  if (!player) return null; // Layout ya maneja el acceso
+  const playerComment = await getPlayerComment(group.id, player.id);
+  const playerStanding = standings.find((s) => s.playerId === player.id);
+  const rankIndex = standings.findIndex((s) => s.playerId === player.id);
+  const playerRank = rankIndex !== -1 ? rankIndex + 1 : undefined;
 
   const match = await getCurrentMatch(group.id);
 
   if (!match) {
     return (
       <div className="space-y-5 animate-fade-in">
+        <PlayerCommentCard
+          player={player}
+          comment={playerComment}
+          standing={playerStanding}
+          rank={playerRank}
+        />
         {lastFinished && (
           <div className="card space-y-4 border-pitch-500/40 bg-gradient-to-br from-pitch-50/80 via-white to-amber-50/50 dark:from-zinc-900 dark:to-zinc-950 p-5 shadow-glow-green animate-slide-up">
             <div className="flex items-center justify-between">
@@ -93,6 +104,14 @@ export default async function GroupHomePage({
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {/* Resumen personalizado del jugador */}
+      <PlayerCommentCard
+        player={player}
+        comment={playerComment}
+        standing={playerStanding}
+        rank={playerRank}
+      />
+
       {/* Banner partido anterior */}
       {!isFinished && lastFinished && (
         <div className="card bg-gradient-to-r from-amber-500/15 via-pitch-500/10 to-blue-500/15 border-pitch-500/40 p-4 animate-slide-down shadow-sm">
@@ -354,3 +373,54 @@ function TopPlayerCard({
     </div>
   );
 }
+
+function PlayerCommentCard({
+  player,
+  comment,
+  standing,
+  rank,
+}: {
+  player: { name: string };
+  comment: string;
+  standing?: { pts: number; won: number; drawn: number; lost: number };
+  rank?: number;
+}) {
+  return (
+    <div className="card bg-gradient-to-br from-pitch-900 via-pitch-800 to-zinc-950 text-white border-pitch-600/40 p-4 shadow-lg rounded-2xl relative overflow-hidden animate-slide-down">
+      <div className="absolute top-0 right-0 w-36 h-36 bg-pitch-500/10 rounded-full blur-2xl pointer-events-none" />
+      <div className="relative z-10 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-pitch-700/80 border border-pitch-500/50 flex items-center justify-center text-sm shadow-inner">
+              🎙️
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-pitch-300">
+                Tu resumen semanal
+              </p>
+              <h3 className="font-extrabold text-sm text-white leading-tight">
+                {player.name}
+              </h3>
+            </div>
+          </div>
+          {standing && (
+            <div className="flex items-center gap-1.5">
+              {rank && rank > 0 && (
+                <span className="chip bg-white/10 text-white font-bold text-[10px] px-2 py-0.5 border border-white/20">
+                  #{rank}
+                </span>
+              )}
+              <span className="chip bg-pitch-500/20 text-pitch-300 font-black text-xs px-2.5 py-0.5 border border-pitch-400/30">
+                {standing.pts} pts
+              </span>
+            </div>
+          )}
+        </div>
+        <p className="text-xs sm:text-sm text-pitch-100/90 font-medium leading-relaxed italic bg-black/20 p-3 rounded-xl border border-white/10">
+          "{comment}"
+        </p>
+      </div>
+    </div>
+  );
+}
+

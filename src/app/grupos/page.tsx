@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser, getCurrentPlayer, getPlayerGroups } from "@/lib/session";
 import { signIn } from "@/auth";
 import { getCurrentMatch } from "@/lib/queries";
+import { getPlayerComment } from "@/lib/player-comments";
 import { formatArt } from "@/lib/time";
 import Link from "next/link";
 import { PlusCircle, LogIn, ChevronRight, Calendar, Users, Shield } from "lucide-react";
@@ -58,6 +59,8 @@ export default async function GruposPage() {
   }
 
   const playerGroups = await getPlayerGroups();
+  const primaryComment =
+    playerGroups.length > 0 ? await getPlayerComment(playerGroups[0].id, player.id) : null;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -69,6 +72,17 @@ export default async function GruposPage() {
           <p className="text-sm text-pitch-900/60 dark:text-zinc-400">Hola, {player.name}</p>
         </div>
       </div>
+
+      {primaryComment && playerGroups.length > 0 && (
+        <div className="card bg-gradient-to-br from-pitch-900 via-pitch-800 to-zinc-950 text-white border-pitch-600/40 p-3.5 shadow-md rounded-2xl animate-slide-down">
+          <div className="flex items-center gap-2 mb-1.5 text-pitch-300 text-[11px] font-black uppercase tracking-wider">
+            <span>🎙️</span> Tu momento en {playerGroups[0].name}
+          </div>
+          <p className="text-xs sm:text-sm text-pitch-100 font-medium italic bg-white/5 p-2.5 rounded-xl border border-white/10">
+            "{primaryComment}"
+          </p>
+        </div>
+      )}
 
       {playerGroups.length === 0 ? (
         <div className="card text-center space-y-4 animate-slide-up">

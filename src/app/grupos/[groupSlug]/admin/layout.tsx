@@ -28,6 +28,7 @@ export default async function GroupAdminLayout({
     { href: `/grupos/${groupSlug}/admin`, label: "Inicio" },
     { href: `/grupos/${groupSlug}/admin/partido`, label: "Partido" },
     { href: `/grupos/${groupSlug}/admin/jugadores`, label: "Miembros" },
+    { href: `/grupos/${groupSlug}/admin/comentarios`, label: "🎙️ Comentarios" },
     { 
       href: `/grupos/${groupSlug}/admin/solicitudes`, 
       label: `Solicitudes${pendingCount > 0 ? ` (${pendingCount})` : ""}`,

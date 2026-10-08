@@ -281,6 +281,29 @@ export const matchThirdHalf = pgTable(
   })
 );
 
+// ─── group_player_comments ────────────────────────────────────────────────
+export const groupPlayerComments = pgTable(
+  "group_player_comments",
+  {
+    id: serial("id").primaryKey(),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    comment: text("comment").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    matchId: integer("match_id").references(() => matches.id, { onDelete: "set null" }),
+  },
+  (t) => ({
+    uniqPlayerGroup: uniqueIndex("group_player_comments_uniq").on(t.groupId, t.playerId),
+    byGroup: index("group_player_comments_group_idx").on(t.groupId),
+  })
+);
+
 export type MatchNote = typeof matchNotes.$inferSelect;
 export type MatchVote = typeof matchVotes.$inferSelect;
 export type MatchThirdHalf = typeof matchThirdHalf.$inferSelect;
+export type GroupPlayerComment = typeof groupPlayerComments.$inferSelect;
+

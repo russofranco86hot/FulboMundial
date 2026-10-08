@@ -220,14 +220,15 @@ export async function getStandings(groupId?: number): Promise<StandingRow[]> {
     const gp = won + drawn + lost;
     const winPct = gp > 0 ? Math.round((won / gp) * 100) : 0;
 
-    // Filtro de inactividad: si hay al menos 5 partidos finalizados y
-    // el jugador no participó en ninguno de los últimos 5, se oculta.
-    if (last5.length >= 5) {
+    // Filtro de inactividad: si hay partidos finalizados y el jugador no participó
+    // en ninguno de los últimos 5 (o de los que haya hasta 5), se oculta de la tabla.
+    // Si vuelve a jugar en un futuro partido, reaparece con todo su histórico.
+    if (last5.length > 0) {
       const playedInLast5 = last5.some((m) => {
         const mTeams = teamsByMatch[m.id];
         return mTeams && (mTeams.A.includes(pid) || mTeams.B.includes(pid));
       });
-      if (!playedInLast5) return null; // marcar para filtrar
+      if (!playedInLast5) return null; // no participó en ninguno de los últimos 5
     }
 
     const badges: string[] = [];

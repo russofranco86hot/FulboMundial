@@ -119,13 +119,13 @@ export async function getAdvancedStats(groupId?: number) {
   }
 
   // Filtrar jugadores inactivos (sin jugar en ninguno de los últimos 5)
-  const activePlayerIds = allMatches.length >= 5
+  const activePlayerIds = allMatches.length > 0
     ? new Set(
         Object.entries(playerHistory)
           .filter(([, data]) => data.last5Count > 0)
           .map(([id]) => Number(id))
       )
-    : null; // si hay menos de 5 partidos, mostrar todos
+    : null;
 
   const topChemistry: PairStat[] = Object.entries(chemistry)
     .filter(([key, c]) => {

@@ -14,6 +14,8 @@ import { getAdvancedStats } from "@/lib/stats";
 import { notifyMatchCompletionAndAchievements } from "@/lib/achievements";
 import { artWallTimeToUtc } from "@/lib/time";
 
+import { savePlayerComment, regenerateAllGroupComments } from "@/lib/player-comments";
+
 function refreshGroup(groupSlug: string) {
   revalidatePath(`/grupos/${groupSlug}`);
   revalidatePath(`/grupos/${groupSlug}/equipos`);
@@ -22,6 +24,7 @@ function refreshGroup(groupSlug: string) {
   revalidatePath(`/grupos/${groupSlug}/admin`);
   revalidatePath(`/grupos/${groupSlug}/admin/partido`);
   revalidatePath(`/grupos/${groupSlug}/admin/jugadores`);
+  revalidatePath(`/grupos/${groupSlug}/admin/comentarios`);
   revalidatePath(`/grupos/${groupSlug}/admin/resultado`);
   revalidatePath(`/grupos/${groupSlug}/admin/push`);
   revalidatePath(`/grupos`);
@@ -330,6 +333,12 @@ export async function adminGroupSaveResult(formData: FormData) {
     oldStats,
   });
 
+  try {
+    await regenerateAllGroupComments(groupId, match.id);
+  } catch (err) {
+    console.error("Error regenerating player comments after match:", err);
+  }
+
   refreshGroup(groupSlug);
   redirect(`/grupos/${groupSlug}/admin/resultado?saved=1`);
 }
@@ -454,3 +463,26 @@ export async function adminGroupCreateAndAddMember(formData: FormData) {
 
   refreshGroup(groupSlug);
 }
+
+export async function adminGroupSavePlayerComment(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  const playerId = Number(formData.get("playerId"));
+  const comment = String(formData.get("comment") || "").trim();
+  if (!playerId || !comment) return;
+
+  await savePlayerComment(groupId, playerId, comment);
+  refreshGroup(groupSlug);
+}
+
+export async function adminGroupRegenerateComments(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  await regenerateAllGroupComments(groupId);
+  refreshGroup(groupSlug);
+}
+
