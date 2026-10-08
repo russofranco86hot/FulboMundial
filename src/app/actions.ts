@@ -7,7 +7,6 @@ import { getCurrentPlayer, getSessionUser, isGroupMember } from "@/lib/session";
 import { getCurrentMatch, getSelection } from "@/lib/queries";
 import { handlePostCloseWithdrawal } from "@/lib/match-actions";
 import { pushToPlayer } from "@/lib/push";
-import { getGroupBySlug } from "@/lib/groups";
 
 type ActionResult = { ok: boolean; error?: string };
 
@@ -41,13 +40,15 @@ export async function claimPlayer(playerId: number): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Anotarse al partido vigente de un grupo. */
-export async function signupAction(groupId: number, groupSlug: string): Promise<ActionResult> {
+/** Anotarse al partido vigente de un grupo o partido general. */
+export async function signupAction(groupId?: number, groupSlug?: string): Promise<ActionResult> {
   const player = await getCurrentPlayer();
   if (!player) return { ok: false, error: "No estás vinculado a ningún jugador." };
 
-  const isMember = await isGroupMember(groupId);
-  if (!isMember) return { ok: false, error: "No sos miembro de este grupo." };
+  if (groupId) {
+    const isMember = await isGroupMember(groupId);
+    if (!isMember) return { ok: false, error: "No sos miembro de este grupo." };
+  }
 
   const match = await getCurrentMatch(groupId);
   if (!match) return { ok: false, error: "No hay partido disponible." };
@@ -70,12 +71,16 @@ export async function signupAction(groupId: number, groupSlug: string): Promise<
     await db.insert(signups).values({ matchId: match.id, playerId: player.id });
   }
 
-  revalidatePath(`/grupos/${groupSlug}`);
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}`);
+  } else {
+    revalidatePath("/");
+  }
   return { ok: true };
 }
 
-/** Darse de baja del partido vigente de un grupo. */
-export async function withdrawAction(groupId: number, groupSlug: string): Promise<ActionResult> {
+/** Darse de baja del partido vigente de un grupo o partido general. */
+export async function withdrawAction(groupId?: number, groupSlug?: string): Promise<ActionResult> {
   const player = await getCurrentPlayer();
   if (!player) return { ok: false, error: "No estás vinculado a ningún jugador." };
 
@@ -95,11 +100,15 @@ export async function withdrawAction(groupId: number, groupSlug: string): Promis
     await handlePostCloseWithdrawal(match, before);
   }
 
-  revalidatePath(`/grupos/${groupSlug}`);
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}`);
+  } else {
+    revalidatePath("/");
+  }
   return { ok: true };
 }
 
-export async function toggleThirdHalfAction(staying: boolean, groupId: number, groupSlug: string): Promise<ActionResult> {
+export async function toggleThirdHalfAction(staying: boolean, groupId?: number, groupSlug?: string): Promise<ActionResult> {
   const player = await getCurrentPlayer();
   if (!player) return { ok: false, error: "No estás vinculado" };
 
@@ -116,11 +125,15 @@ export async function toggleThirdHalfAction(staying: boolean, groupId: number, g
       set: { staying, createdAt: new Date() },
     });
 
-  revalidatePath(`/grupos/${groupSlug}`);
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}`);
+  } else {
+    revalidatePath("/");
+  }
   return { ok: true };
 }
 
-export async function addMatchNoteAction(matchId: number, note: string, groupSlug: string): Promise<ActionResult> {
+export async function addMatchNoteAction(matchId: number, note: string, groupSlug?: string): Promise<ActionResult> {
   const player = await getCurrentPlayer();
   if (!player) return { ok: false, error: "No estás vinculado" };
   if (!note.trim()) return { ok: false, error: "La nota no puede estar vacía" };
@@ -132,7 +145,11 @@ export async function addMatchNoteAction(matchId: number, note: string, groupSlu
     note: note.trim(),
   });
 
-  revalidatePath(`/grupos/${groupSlug}/historial/${matchId}`);
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}/historial/${matchId}`);
+  } else {
+    revalidatePath(`/historial/${matchId}`);
+  }
   return { ok: true };
 }
 
@@ -140,7 +157,7 @@ export async function voteMatchAwardAction(
   matchId: number,
   categoryId: "mvp" | "tronco" | "gol",
   candidateId: number,
-  groupSlug: string
+  groupSlug?: string
 ): Promise<ActionResult> {
   const player = await getCurrentPlayer();
   if (!player) return { ok: false, error: "No estás vinculado" };
@@ -167,15 +184,22 @@ export async function voteMatchAwardAction(
     };
     const award = awardsConfig[categoryId];
     if (award) {
+      const url = groupSlug
+        ? `/grupos/${groupSlug}/historial/${matchId}`
+        : `/historial/${matchId}`;
       pushToPlayer(candidateId, {
         title: award.title,
         body: award.body,
-        url: `/grupos/${groupSlug}/historial/${matchId}`,
+        url,
         tag: `voto-${matchId}-${categoryId}-${Date.now()}`,
       }).catch(console.error);
     }
   }
 
-  revalidatePath(`/grupos/${groupSlug}/historial/${matchId}`);
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}/historial/${matchId}`);
+  } else {
+    revalidatePath(`/historial/${matchId}`);
+  }
   return { ok: true };
 }
