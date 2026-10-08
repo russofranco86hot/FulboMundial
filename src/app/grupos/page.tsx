@@ -32,6 +32,14 @@ export default async function GruposPage() {
               <LogIn size={18} /> Entrar con Google
             </button>
           </form>
+          <div>
+            <Link
+              href="/login"
+              className="text-xs font-semibold text-pitch-600 hover:text-pitch-700 dark:text-pitch-400 hover:underline"
+            >
+              O ingresar con correo y contraseña →
+            </Link>
+          </div>
         </div>
       </div>
     );

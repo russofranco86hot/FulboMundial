@@ -307,3 +307,23 @@ export type MatchVote = typeof matchVotes.$inferSelect;
 export type MatchThirdHalf = typeof matchThirdHalf.$inferSelect;
 export type GroupPlayerComment = typeof groupPlayerComments.$inferSelect;
 
+// ─── player_credentials ───────────────────────────────────────────────────
+export const playerCredentials = pgTable(
+  "player_credentials",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqEmail: uniqueIndex("player_credentials_email_uniq").on(t.email),
+    byPlayer: index("player_credentials_player_idx").on(t.playerId),
+  })
+);
+
+export type PlayerCredential = typeof playerCredentials.$inferSelect;
+

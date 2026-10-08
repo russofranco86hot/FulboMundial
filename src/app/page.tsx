@@ -35,6 +35,11 @@ export default async function HomePage() {
           >
             <button className="btn-primary w-full text-lg">Entrar con Google</button>
           </form>
+          <div className="pt-1">
+            <Link href="/login" className="text-xs font-semibold text-pitch-600 hover:text-pitch-700 dark:text-pitch-400 hover:underline">
+              O ingresar con correo y contraseña →
+            </Link>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-3 w-full text-center animate-slide-up" style={{ animationDelay: "150ms" }}>
