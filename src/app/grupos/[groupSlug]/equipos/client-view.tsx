@@ -78,8 +78,15 @@ export function EquiposClientView({
         </div>
 
         <div className="space-y-4">
-          <Pitch team="A" players={teamA} />
-          <Pitch team="B" players={teamB} />
+          <Pitch teamName="Equipo Claro" color="claro" players={teamA} />
+          
+          <div className="flex justify-center -my-2 relative z-10">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center text-white font-black text-lg shadow-glow-green bg-gradient-to-r from-pitch-600 to-pitch-400">
+              VS
+            </div>
+          </div>
+
+          <Pitch teamName="Equipo Oscuro" color="oscuro" players={teamB} />
         </div>
       </div>
     </div>
