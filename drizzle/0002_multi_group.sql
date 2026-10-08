@@ -128,3 +128,11 @@ VALUES ('Fútbol de los Miércoles', 'futbol-miercoles', 'El fútbol 5 de los mi
 ON CONFLICT DO NOTHING;
 
 UPDATE "matches" SET "group_id" = (SELECT id FROM "groups" WHERE slug = 'futbol-miercoles') WHERE "group_id" IS NULL;
+--> statement-breakpoint
+
+-- Asignar automáticamente a todos los jugadores del plantel histórico como miembros del grupo
+INSERT INTO "group_members" ("group_id", "player_id", "role", "status")
+SELECT (SELECT id FROM "groups" WHERE slug = 'futbol-miercoles'), id, 'member', 'active'
+FROM "players"
+WHERE is_guest = false
+ON CONFLICT ("group_id", "player_id") DO NOTHING;
