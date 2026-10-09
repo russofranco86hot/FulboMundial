@@ -16,12 +16,15 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   return session.user as SessionUser;
 }
 
+import { ensureDbUpgrades } from "@/lib/db-migrations";
+
 /**
  * Resuelve el `Player` vinculado al usuario logueado.
  * Busca primero por google_id; si no, por email (insensible a mayúsculas/minúsculas).
  * Si coincide por email y no tenía googleId guardado, lo vincula automáticamente.
  */
 export async function getCurrentPlayer(): Promise<Player | null> {
+  await ensureDbUpgrades();
   const user = await getSessionUser();
   if (!user) return null;
 
@@ -30,11 +33,22 @@ export async function getCurrentPlayer(): Promise<Player | null> {
   if (user.email) conds.push(sql`lower(${players.email}) = ${user.email.toLowerCase().trim()}`);
   if (conds.length === 0) return null;
 
-  const rows = await db
-    .select()
-    .from(players)
-    .where(conds.length === 1 ? conds[0] : or(...conds))
-    .limit(1);
+  let rows: Player[] = [];
+  try {
+    rows = await db
+      .select()
+      .from(players)
+      .where(conds.length === 1 ? conds[0] : or(...conds))
+      .limit(1);
+  } catch (err) {
+    console.warn("Could not query players with all columns, forcing migrations:", err);
+    await ensureDbUpgrades();
+    rows = await db
+      .select()
+      .from(players)
+      .where(conds.length === 1 ? conds[0] : or(...conds))
+      .limit(1);
+  }
 
   const player = rows[0] ?? null;
   if (player && user.googleId && !player.googleId) {

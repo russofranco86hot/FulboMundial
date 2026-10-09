@@ -14,6 +14,7 @@ import { db, matchThirdHalf, players, results } from "@/db";
 import { eq } from "drizzle-orm";
 import { CheckCircle2, Clock, CircleDashed, ArrowRight, CloudSun } from "lucide-react";
 import { notFound } from "next/navigation";
+import { ensureDbUpgrades } from "@/lib/db-migrations";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export default async function GroupHomePage({
 }: {
   params: Promise<{ groupSlug: string }>;
 }) {
+  await ensureDbUpgrades();
   const { groupSlug } = await params;
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();

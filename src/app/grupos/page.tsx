@@ -8,10 +8,12 @@ import Link from "next/link";
 import { PlusCircle, LogIn, ChevronRight, Calendar, Users, Shield } from "lucide-react";
 import { db, matches, results, groups } from "@/db";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { ensureDbUpgrades } from "@/lib/db-migrations";
 
 export const dynamic = "force-dynamic";
 
 export default async function GruposPage() {
+  await ensureDbUpgrades();
   const user = await getSessionUser();
 
   if (!user) {
