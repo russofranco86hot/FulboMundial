@@ -4,8 +4,8 @@
   "description": "Organizá tus partidos de fútbol con amigos: anotarse, equipos, historial y estadísticas.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0b3d23",
-  "theme_color": "#15803d",
+  "background_color": "#0b7746",
+  "theme_color": "#0b7746",
   "orientation": "portrait",
   "lang": "es-AR",
   "icons": [
@@ -20,6 +20,11 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
     }
   ]
 }
