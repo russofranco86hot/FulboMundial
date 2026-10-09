@@ -34,6 +34,8 @@ export const players = pgTable(
     isGoalkeeper: boolean("is_goalkeeper").notNull().default(false),
     // 0..5, half-steps allowed.
     stars: numeric("stars", { precision: 3, scale: 1 }).notNull().default("0"),
+    preferredPosition: text("preferred_position").default("MED"), // 'GK', 'DEF', 'MID', 'FWD'
+    preferredFoot: text("preferred_foot").default("R"), // 'R', 'L', 'BOTH'
     // Ajustes manuales del historial (el admin puede corregir G/E/P; pueden ser negativos).
     adjWon: integer("adj_won").notNull().default(0),
     adjDrawn: integer("adj_drawn").notNull().default(0),
@@ -326,4 +328,64 @@ export const playerCredentials = pgTable(
 );
 
 export type PlayerCredential = typeof playerCredentials.$inferSelect;
+
+// ─── match_payments ───────────────────────────────────────────────────────
+export const matchPayments = pgTable("match_payments", {
+  id: serial("id").primaryKey(),
+  matchId: integer("match_id")
+    .notNull()
+    .references(() => matches.id, { onDelete: "cascade" })
+    .unique(),
+  totalPrice: integer("total_price").notNull().default(0),
+  paymentAlias: text("payment_alias"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── player_payments ──────────────────────────────────────────────────────
+export const playerPayments = pgTable(
+  "player_payments",
+  {
+    id: serial("id").primaryKey(),
+    matchId: integer("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    paid: boolean("paid").notNull().default(false),
+    notified: boolean("notified").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uniq: uniqueIndex("player_payments_uniq").on(t.matchId, t.playerId),
+    byMatch: index("player_payments_match_idx").on(t.matchId),
+  })
+);
+
+// ─── match_goals ──────────────────────────────────────────────────────────
+export const matchGoals = pgTable(
+  "match_goals",
+  {
+    id: serial("id").primaryKey(),
+    matchId: integer("match_id")
+      .notNull()
+      .references(() => matches.id, { onDelete: "cascade" }),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    goals: integer("goals").notNull().default(1),
+    assists: integer("assists").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uniq: uniqueIndex("match_goals_player_match_uniq").on(t.matchId, t.playerId),
+    byMatch: index("match_goals_match_idx").on(t.matchId),
+    byPlayer: index("match_goals_player_idx").on(t.playerId),
+  })
+);
+
+export type MatchPayment = typeof matchPayments.$inferSelect;
+export type PlayerPayment = typeof playerPayments.$inferSelect;
+export type MatchGoal = typeof matchGoals.$inferSelect;
 

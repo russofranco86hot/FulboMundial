@@ -9,10 +9,13 @@ import {
   adminGroupAddGuest,
   adminGroupAddPlayerToTeam,
   adminGroupPushTeams,
+  adminGroupSavePaymentConfig,
+  adminGroupTogglePlayerPaid,
 } from "../actions";
+import { getMatchPaymentConfig, getMatchPlayerPayments } from "@/lib/payments";
 import { TeamEditor, type TeamRow } from "@/components/team-editor";
 import { WhatsAppShare } from "@/components/whatsapp-share";
-import { MessageCircle, Shuffle, Users } from "lucide-react";
+import { MessageCircle, Shuffle, Users, Wallet, CheckCircle2, Clock, DollarSign } from "lucide-react";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -112,6 +115,11 @@ export default async function GroupAdminPartido({
 
   const titularesCount = selection.filter((s) => s.status === "playing").length;
   const suplentesCount = selection.filter((s) => s.status === "substitute").length;
+  const playingPlayers = selection.filter((s) => s.status === "playing");
+
+  const paymentConfig = await getMatchPaymentConfig(match.id);
+  const playerPaymentsList = await getMatchPlayerPayments(match.id);
+  const paymentMap = new Map(playerPaymentsList.map((p) => [p.playerId, p]));
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -357,6 +365,129 @@ export default async function GroupAdminPartido({
         <div className="border-t border-pitch-100 dark:border-zinc-800 pt-4 mt-2">
           <WhatsAppShare text={teamsMsg} label="Enviar equipos al grupo" />
         </div>
+      </div>
+
+      {/* ─── Control de Pagos de Cancha ─── */}
+      <div className="card space-y-4 border-emerald-500/30 bg-gradient-to-br from-pitch-50/30 via-white to-emerald-50/20 dark:from-zinc-900 dark:to-zinc-950">
+        <div className="flex items-center justify-between border-b border-pitch-100/60 dark:border-zinc-800 pb-2">
+          <div className="flex items-center gap-2">
+            <Wallet size={18} className="text-emerald-600 dark:text-emerald-400" />
+            <h3 className="font-bold text-pitch-800 dark:text-zinc-100">
+              Pagos de la Cancha
+            </h3>
+          </div>
+          {paymentConfig && paymentConfig.totalPrice > 0 && match.capacity > 0 && (
+            <span className="chip bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold px-2 py-0.5">
+              ${Math.round(paymentConfig.totalPrice / match.capacity).toLocaleString("es-AR")} c/u
+            </span>
+          )}
+        </div>
+
+        <form action={adminGroupSavePaymentConfig} className="space-y-3">
+          <input type="hidden" name="groupId" value={group.id} />
+          <input type="hidden" name="groupSlug" value={group.slug} />
+          <input type="hidden" name="matchId" value={match.id} />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold mb-1 text-pitch-800 dark:text-zinc-200">
+                Precio total de la cancha ($)
+              </label>
+              <input
+                type="number"
+                name="totalPrice"
+                defaultValue={paymentConfig?.totalPrice ?? 0}
+                placeholder="Ej: 35000"
+                min={0}
+                className="input w-full py-1.5 px-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold mb-1 text-pitch-800 dark:text-zinc-200">
+                Alias o CBU para transferir
+              </label>
+              <input
+                name="paymentAlias"
+                defaultValue={paymentConfig?.paymentAlias ?? ""}
+                placeholder="Ej: cancha.futbol.miercoles"
+                className="input w-full py-1.5 px-3 text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold mb-1 text-pitch-900/60 dark:text-zinc-400">
+              Notas o instrucciones de pago (opcional)
+            </label>
+            <input
+              name="notes"
+              defaultValue={paymentConfig?.notes ?? ""}
+              placeholder="Ej: Transferir antes de las 18 hs / Enviar comprobante"
+              className="input w-full py-1.5 px-3 text-xs"
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <button type="submit" className="btn-primary text-xs py-1.5 px-4 font-bold shadow-sm">
+              Guardar configuración de pago
+            </button>
+          </div>
+        </form>
+
+        {/* Checklist de cobranza */}
+        {playingPlayers.length > 0 && (
+          <div className="pt-3 border-t border-pitch-100/60 dark:border-zinc-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-pitch-800 dark:text-zinc-200">
+                Checklist de cobranza ({playerPaymentsList.filter((p) => p.paid).length} de {playingPlayers.length} pagaron)
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              {playingPlayers.map((p) => {
+                const payInfo = paymentMap.get(p.playerId);
+                const isPaid = !!payInfo?.paid;
+                const hasNotified = !!payInfo?.notified && !isPaid;
+
+                return (
+                  <div
+                    key={p.playerId}
+                    className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-800/80 border border-pitch-100/60 dark:border-zinc-700/60 text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-pitch-800 dark:text-zinc-200">
+                        {p.name}
+                      </span>
+                      {hasNotified && (
+                        <span className="chip bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[10px] font-bold px-1.5 py-0.5">
+                          ⏳ Avisó transferencia
+                        </span>
+                      )}
+                    </div>
+
+                    <form action={adminGroupTogglePlayerPaid}>
+                      <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="groupSlug" value={group.slug} />
+                      <input type="hidden" name="matchId" value={match.id} />
+                      <input type="hidden" name="playerId" value={p.playerId} />
+                      <input type="hidden" name="paid" value={isPaid ? "false" : "true"} />
+                      <button
+                        type="submit"
+                        className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                          isPaid
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 hover:bg-emerald-200"
+                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 hover:bg-zinc-200"
+                        }`}
+                      >
+                        {isPaid ? "✅ Pagó" : "Pendiente"}
+                      </button>
+                    </form>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { getGroupBySlug } from "@/lib/groups";
 import { getStandings, getRecentMatches } from "@/lib/queries";
+import { getGroupTopScorers } from "@/lib/goals";
 import { formatArt } from "@/lib/time";
 import { Trophy } from "lucide-react";
 import Link from "next/link";
@@ -18,6 +19,7 @@ export default async function GroupHistorialPage({
 
   const rows = await getStandings(group.id);
   const recentMatches = await getRecentMatches(group.id, 5);
+  const topScorers = await getGroupTopScorers(group.id);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -120,6 +122,72 @@ export default async function GroupHistorialPage({
           </table>
         </div>
       </div>
+
+      {/* ─── Tabla de Goleadores (Pichichi) ─── */}
+      {topScorers.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-pitch-700 dark:text-zinc-200 flex items-center gap-2">
+              <span>⚽</span> Tabla de Goleadores (Pichichi)
+            </h2>
+            <span className="chip bg-pitch-100 text-pitch-800 dark:bg-zinc-800 dark:text-pitch-300 text-xs font-bold px-2 py-0.5">
+              Goles y Asistencias
+            </span>
+          </div>
+
+          <div className="card overflow-x-auto p-0">
+            <table className="w-full text-sm">
+              <thead className="bg-pitch-50/80 dark:bg-zinc-900 border-b border-pitch-100/50 dark:border-zinc-800 text-left text-xs uppercase text-pitch-900/60 dark:text-zinc-400">
+                <tr>
+                  <th className="px-3 py-2.5">#</th>
+                  <th className="px-3 py-2.5">Jugador</th>
+                  <th className="px-3 py-2.5 text-center font-bold text-pitch-800 dark:text-zinc-200">⚽ Goles</th>
+                  <th className="px-3 py-2.5 text-center">👟 Asist.</th>
+                  <th className="px-3 py-2.5 text-center">Partidos c/gol</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topScorers.map((s, idx) => (
+                  <tr
+                    key={s.playerId}
+                    className={`border-b border-pitch-50/50 dark:border-zinc-800/40 hover:bg-pitch-50/40 dark:hover:bg-zinc-800/30 transition-colors ${
+                      idx === 0
+                        ? "bg-amber-50/60 dark:bg-amber-950/20 font-bold"
+                        : idx === 1
+                        ? "bg-zinc-50/60 dark:bg-zinc-800/20"
+                        : ""
+                    }`}
+                  >
+                    <td className="px-3 py-2.5 font-bold text-xs text-pitch-900/50 dark:text-zinc-400">
+                      {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `${idx + 1}`}
+                    </td>
+                    <td className="px-3 py-2.5 font-medium dark:text-zinc-200">
+                      <div className="flex items-center gap-1.5">
+                        <span>{s.name}</span>
+                        {s.isGoalkeeper && <span title="Arquero">🧤</span>}
+                        {idx === 0 && (
+                          <span className="chip bg-amber-400 text-amber-950 text-[10px] font-black px-1.5 py-0.5 rounded-full ml-1">
+                            Pichichi
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-base font-extrabold text-pitch-700 dark:text-pitch-400 tabular-nums">
+                      {s.totalGoals}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">
+                      {s.totalAssists}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-xs tabular-nums text-pitch-900/60 dark:text-zinc-400">
+                      {s.matchesWithGoals}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {recentMatches.length > 0 && (
         <div className="space-y-4">

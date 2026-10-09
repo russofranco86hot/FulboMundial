@@ -6,8 +6,9 @@ import {
   adminGroupUpdatePlayer,
   adminGroupSetStars,
   adminGroupCreateAndAddMember,
+  adminGroupResetPassword,
 } from "../actions";
-import { ArrowUp, ArrowDown, Shield, UserMinus, UserPlus, UserCheck } from "lucide-react";
+import { ArrowUp, ArrowDown, Shield, UserMinus, UserPlus, UserCheck, Key } from "lucide-react";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -117,30 +118,57 @@ export default async function GroupAdminJugadores({
             </div>
 
             <p className="text-[11px] text-pitch-900/60 dark:text-zinc-400">
-              💡 Si ingresás su correo, cuando ese jugador inicie sesión con Google quedará vinculado automáticamente a su perfil en este grupo.
+              💡 Si ingresás su correo, cuando ese jugador inicie sesión (con Google o contraseña) quedará vinculado automáticamente a su perfil.
             </p>
 
-            <div className="flex items-center justify-between pt-2 border-t border-pitch-100/60 dark:border-zinc-700/60 gap-4">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-pitch-800 dark:text-zinc-200">⭐ Nivel:</span>
-                  <input
-                    type="number"
-                    name="stars"
-                    step="0.5"
-                    min="0"
-                    max="5"
-                    defaultValue="3"
-                    className="input w-20 py-1 px-2 text-center text-sm"
-                  />
-                </div>
-
-                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-pitch-800 dark:text-zinc-300">
-                  <input type="checkbox" name="isGoalkeeper" className="rounded" />
-                  <span>🧤 Es arquero</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-pitch-100/60 dark:border-zinc-700/60">
+              <div>
+                <label className="block text-[11px] font-bold mb-1 text-pitch-800 dark:text-zinc-200">
+                  Posición habitual:
                 </label>
+                <select name="preferredPosition" defaultValue="MED" className="input w-full py-1.5 px-2 text-xs">
+                  <option value="GK">🧤 Arquero</option>
+                  <option value="DEF">🛡️ Defensor</option>
+                  <option value="MED">🎯 Mediocampista</option>
+                  <option value="FWD">⚡ Delantero</option>
+                </select>
               </div>
 
+              <div>
+                <label className="block text-[11px] font-bold mb-1 text-pitch-800 dark:text-zinc-200">
+                  Pie hábil:
+                </label>
+                <select name="preferredFoot" defaultValue="R" className="input w-full py-1.5 px-2 text-xs">
+                  <option value="R">🦵 Derecho</option>
+                  <option value="L">🦵 Zurdo</option>
+                  <option value="BOTH">🦵 Ambidiestro</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold mb-1 text-pitch-800 dark:text-zinc-200">
+                  ⭐ Nivel:
+                </label>
+                <input
+                  type="number"
+                  name="stars"
+                  step="0.5"
+                  min="0"
+                  max="5"
+                  defaultValue="3"
+                  className="input w-full py-1.5 px-2 text-center text-xs"
+                />
+              </div>
+
+              <div className="flex flex-col justify-end">
+                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-pitch-800 dark:text-zinc-300 py-2">
+                  <input type="checkbox" name="isGoalkeeper" className="rounded" />
+                  <span>🧤 Arquero fijo</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-pitch-100/60 dark:border-zinc-700/60">
               <button className="btn-primary text-xs px-4 py-2">
                 Agregar al grupo
               </button>
@@ -165,7 +193,7 @@ export default async function GroupAdminJugadores({
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-sm text-pitch-800 dark:text-zinc-100">{m.name}</span>
                     {m.role === "admin" ? (
                       <span className="chip bg-pitch-600 text-white text-[10px] px-1.5 py-0.5 flex items-center gap-1">
@@ -176,6 +204,12 @@ export default async function GroupAdminJugadores({
                         Miembro
                       </span>
                     )}
+                    <span className="chip bg-pitch-100 dark:bg-pitch-950/40 text-pitch-800 dark:text-pitch-300 text-[10px] px-1.5 py-0.5">
+                      {m.preferredPosition === "GK" ? "🧤 ARQ" : m.preferredPosition === "DEF" ? "🛡️ DEF" : m.preferredPosition === "DEL" || m.preferredPosition === "FWD" ? "⚡ DEL" : "🎯 MED"}
+                    </span>
+                    <span className="chip bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[10px] px-1.5 py-0.5">
+                      {m.preferredFoot === "L" ? "Zurdo" : m.preferredFoot === "BOTH" ? "Ambidiestro" : "Derecho"}
+                    </span>
                   </div>
                   {m.email && <p className="text-xs text-pitch-900/50 dark:text-zinc-400">{m.email}</p>}
                 </div>
@@ -207,7 +241,7 @@ export default async function GroupAdminJugadores({
                 </div>
               </div>
 
-              {/* Formulario para editar nombre, correo, estrellas y arquero */}
+              {/* Formulario para editar nombre, correo, estrellas, posición y pie */}
               <form action={adminGroupUpdatePlayer} className="space-y-2 pt-2 border-t border-pitch-100/60 dark:border-zinc-800 text-xs">
                 <input type="hidden" name="groupId" value={group.id} />
                 <input type="hidden" name="groupSlug" value={group.slug} />
@@ -241,22 +275,54 @@ export default async function GroupAdminJugadores({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-1">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-pitch-900/60 dark:text-zinc-400">Nivel:</span>
-                      <input
-                        type="number"
-                        name="stars"
-                        step="0.5"
-                        min="0"
-                        max="5"
-                        defaultValue={Number(m.stars)}
-                        className="input w-16 py-1 px-2 text-center text-xs"
-                      />
-                      <span className="text-xs">⭐</span>
-                    </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-pitch-900/60 dark:text-zinc-400 mb-0.5">
+                      Posición:
+                    </label>
+                    <select
+                      name="preferredPosition"
+                      defaultValue={m.preferredPosition ?? "MED"}
+                      className="input w-full py-1 px-1.5 text-xs"
+                    >
+                      <option value="GK">🧤 Arquero</option>
+                      <option value="DEF">🛡️ Defensor</option>
+                      <option value="MED">🎯 Mediocampista</option>
+                      <option value="FWD">⚡ Delantero</option>
+                    </select>
+                  </div>
 
+                  <div>
+                    <label className="block text-[11px] font-semibold text-pitch-900/60 dark:text-zinc-400 mb-0.5">
+                      Pie hábil:
+                    </label>
+                    <select
+                      name="preferredFoot"
+                      defaultValue={m.preferredFoot ?? "R"}
+                      className="input w-full py-1 px-1.5 text-xs"
+                    >
+                      <option value="R">Derecho</option>
+                      <option value="L">Zurdo</option>
+                      <option value="BOTH">Ambidiestro</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-pitch-900/60 dark:text-zinc-400 mb-0.5">
+                      ⭐ Nivel:
+                    </label>
+                    <input
+                      type="number"
+                      name="stars"
+                      step="0.5"
+                      min="0"
+                      max="5"
+                      defaultValue={Number(m.stars)}
+                      className="input w-full py-1 px-1.5 text-center text-xs"
+                    />
+                  </div>
+
+                  <div className="flex flex-col justify-end pb-1">
                     <label className="flex items-center gap-1 cursor-pointer">
                       <input
                         type="checkbox"
@@ -264,15 +330,42 @@ export default async function GroupAdminJugadores({
                         defaultChecked={m.isGoalkeeper}
                         className="rounded"
                       />
-                      <span className="text-pitch-900/70 dark:text-zinc-400">🧤 Arquero</span>
+                      <span className="text-pitch-900/70 dark:text-zinc-400 text-xs">🧤 Arquero fijo</span>
                     </label>
                   </div>
+                </div>
 
+                <div className="flex items-center justify-end pt-1">
                   <button type="submit" className="btn-primary text-xs py-1 px-3">
-                    Guardar
+                    Guardar cambios
                   </button>
                 </div>
               </form>
+
+              {/* Reset o asignación de contraseña */}
+              {m.email && (
+                <details className="pt-1.5 border-t border-pitch-100/50 dark:border-zinc-800/60">
+                  <summary className="cursor-pointer text-[11px] font-semibold text-pitch-600 dark:text-pitch-400 flex items-center gap-1 hover:underline">
+                    <Key size={12} /> Restablecer o crear contraseña para este correo
+                  </summary>
+                  <form action={adminGroupResetPassword} className="flex items-center gap-2 pt-2">
+                    <input type="hidden" name="groupId" value={group.id} />
+                    <input type="hidden" name="groupSlug" value={group.slug} />
+                    <input type="hidden" name="playerId" value={m.playerId} />
+                    <input
+                      type="password"
+                      name="newPassword"
+                      placeholder="Nueva clave (mínimo 6 caracteres)"
+                      minLength={6}
+                      className="input flex-1 py-1 px-2 text-xs"
+                      required
+                    />
+                    <button type="submit" className="btn-secondary text-[11px] py-1 px-2.5 whitespace-nowrap">
+                      Actualizar clave
+                    </button>
+                  </form>
+                </details>
+              )}
             </div>
           ))}
         </div>

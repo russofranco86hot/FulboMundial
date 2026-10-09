@@ -15,6 +15,9 @@ import { notifyMatchCompletionAndAchievements } from "@/lib/achievements";
 import { artWallTimeToUtc } from "@/lib/time";
 
 import { savePlayerComment, regenerateAllGroupComments } from "@/lib/player-comments";
+import { saveMatchPaymentConfig, adminTogglePlayerPaid } from "@/lib/payments";
+import { saveMatchGoals } from "@/lib/goals";
+import { adminResetPlayerPassword } from "@/lib/auth-credentials";
 
 function refreshGroup(groupSlug: string) {
   revalidatePath(`/grupos/${groupSlug}`);
@@ -145,6 +148,8 @@ export async function adminGroupGenerateTeams(formData: FormData) {
       name: players.name,
       stars: players.stars,
       isGoalkeeper: players.isGoalkeeper,
+      preferredPosition: players.preferredPosition,
+      preferredFoot: players.preferredFoot,
     })
     .from(signups)
     .innerJoin(players, eq(players.id, signups.playerId))
@@ -156,7 +161,14 @@ export async function adminGroupGenerateTeams(formData: FormData) {
   ).filter((s) => s.status === "playing");
 
   const guestRows = await db
-    .select({ playerId: teams.playerId, name: players.name, stars: players.stars, isGoalkeeper: players.isGoalkeeper })
+    .select({
+      playerId: teams.playerId,
+      name: players.name,
+      stars: players.stars,
+      isGoalkeeper: players.isGoalkeeper,
+      preferredPosition: players.preferredPosition,
+      preferredFoot: players.preferredFoot,
+    })
     .from(teams)
     .innerJoin(players, eq(players.id, teams.playerId))
     .where(and(eq(teams.matchId, match.id), eq(teams.isGuest, true)));
@@ -168,6 +180,8 @@ export async function adminGroupGenerateTeams(formData: FormData) {
       stars: Number(s.stars) || 0,
       isGoalkeeper: s.isGoalkeeper,
       isGuest: false,
+      preferredPosition: s.preferredPosition,
+      preferredFoot: s.preferredFoot,
     })),
     ...guestRows.map((g) => ({
       playerId: g.playerId,
@@ -175,6 +189,8 @@ export async function adminGroupGenerateTeams(formData: FormData) {
       stars: Number(g.stars) || 0,
       isGoalkeeper: g.isGoalkeeper,
       isGuest: true,
+      preferredPosition: g.preferredPosition,
+      preferredFoot: g.preferredFoot,
     })),
   ];
 
@@ -333,6 +349,26 @@ export async function adminGroupSaveResult(formData: FormData) {
     oldStats,
   });
 
+  // Guardar goles y asistencias si se incluyeron en el formulario
+  const goalsEntries: { playerId: number; goals: number; assists: number }[] = [];
+  for (const [key, val] of formData.entries()) {
+    if (key.startsWith("goals_")) {
+      const pid = Number(key.replace("goals_", ""));
+      const goals = Number(val || 0);
+      const assists = Number(formData.get(`assists_${pid}`) || 0);
+      if (pid && (goals > 0 || assists > 0)) {
+        goalsEntries.push({ playerId: pid, goals, assists });
+      }
+    }
+  }
+  if (goalsEntries.length > 0) {
+    try {
+      await saveMatchGoals(match.id, goalsEntries);
+    } catch (err) {
+      console.warn("Could not save match goals:", err);
+    }
+  }
+
   try {
     await regenerateAllGroupComments(groupId, match.id);
   } catch (err) {
@@ -372,6 +408,8 @@ export async function adminGroupUpdatePlayer(formData: FormData) {
   const rawEmail = String(formData.get("email") || "").trim();
   const email = rawEmail ? rawEmail.toLowerCase() : null;
   const stars = String(formData.get("stars") ?? "0");
+  const preferredPosition = String(formData.get("preferredPosition") || "MED");
+  const preferredFoot = String(formData.get("preferredFoot") || "R");
 
   await db
     .update(players)
@@ -380,6 +418,8 @@ export async function adminGroupUpdatePlayer(formData: FormData) {
       stars,
       isHistorico: formData.get("isHistorico") === "on",
       isGoalkeeper: formData.get("isGoalkeeper") === "on",
+      preferredPosition,
+      preferredFoot,
       email,
     })
     .where(eq(players.id, id));
@@ -409,6 +449,8 @@ export async function adminGroupCreateAndAddMember(formData: FormData) {
   const email = rawEmail ? rawEmail.toLowerCase() : null;
   const stars = String(formData.get("stars") || "3");
   const isGoalkeeper = formData.get("isGoalkeeper") === "on";
+  const preferredPosition = String(formData.get("preferredPosition") || (isGoalkeeper ? "GK" : "MED"));
+  const preferredFoot = String(formData.get("preferredFoot") || "R");
 
   const { groupMembers } = await import("@/db/schema");
 
@@ -450,6 +492,8 @@ export async function adminGroupCreateAndAddMember(formData: FormData) {
         name,
         stars,
         isGoalkeeper,
+        preferredPosition,
+        preferredFoot,
         isGuest: false,
         isHistorico: false,
         priorityOrder: 99,
@@ -487,6 +531,75 @@ export async function adminGroupRegenerateComments(formData: FormData) {
   await requireGroupAdmin(groupId);
 
   await regenerateAllGroupComments(groupId);
+  refreshGroup(groupSlug);
+}
+
+// ─── Pagos del partido ────────────────────────────────────────────────────
+export async function adminGroupSavePaymentConfig(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  const matchId = Number(formData.get("matchId"));
+  const totalPrice = Math.max(0, parseInt(String(formData.get("totalPrice") || "0"), 10) || 0);
+  const paymentAlias = String(formData.get("paymentAlias") || "").trim() || null;
+  const notes = String(formData.get("notes") || "").trim() || null;
+
+  if (!matchId) return;
+  await saveMatchPaymentConfig({ matchId, totalPrice, paymentAlias, notes });
+  refreshGroup(groupSlug);
+}
+
+export async function adminGroupTogglePlayerPaid(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  const matchId = Number(formData.get("matchId"));
+  const playerId = Number(formData.get("playerId"));
+  const paid = formData.get("paid") === "true";
+
+  if (!matchId || !playerId) return;
+  await adminTogglePlayerPaid(matchId, playerId, paid);
+  refreshGroup(groupSlug);
+}
+
+// ─── Claves / Credenciales ────────────────────────────────────────────────
+export async function adminGroupResetPassword(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  const playerId = Number(formData.get("playerId"));
+  const newPassword = String(formData.get("newPassword") || "").trim();
+
+  if (!playerId || !newPassword) return;
+  await adminResetPlayerPassword(playerId, newPassword);
+  refreshGroup(groupSlug);
+}
+
+// ─── Goles del partido ────────────────────────────────────────────────────
+export async function adminGroupSaveMatchGoals(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  const matchId = Number(formData.get("matchId"));
+  if (!matchId) return;
+
+  const entries: { playerId: number; goals: number; assists: number }[] = [];
+  for (const [key, val] of formData.entries()) {
+    if (key.startsWith("goals_")) {
+      const pid = Number(key.replace("goals_", ""));
+      const goals = Number(val || 0);
+      const assists = Number(formData.get(`assists_${pid}`) || 0);
+      if (pid && (goals > 0 || assists > 0)) {
+        entries.push({ playerId: pid, goals, assists });
+      }
+    }
+  }
+
+  await saveMatchGoals(matchId, entries);
   refreshGroup(groupSlug);
 }
 

@@ -5,17 +5,37 @@ import { motion } from "framer-motion";
 import { Share2 } from "lucide-react";
 import { toBlob } from "html-to-image";
 
-type Player = { id: number; name: string; isGoalkeeper: boolean; isGuest: boolean };
+export type PitchPlayer = {
+  id: number;
+  name: string;
+  isGoalkeeper: boolean;
+  isGuest: boolean;
+  stars?: number;
+  preferredPosition?: string | null;
+  preferredFoot?: string | null;
+};
 
-// Posiciones iniciales para 5 jugadores (1-1-2-1)
-// Valores en porcentaje respecto al contenedor de la cancha.
-const DEFAULT_POSITIONS = [
-  { top: "85%", left: "50%" }, // 0: Arquero (Abajo al centro)
-  { top: "65%", left: "50%" }, // 1: Defensa (Abajo central)
-  { top: "40%", left: "20%" }, // 2: Medio Izquierdo
-  { top: "40%", left: "80%" }, // 3: Medio Derecho
-  { top: "15%", left: "50%" }, // 4: Delantero (Arriba al centro)
-];
+function getTacticalCoords(player: PitchPlayer, index: number, totalKeepers: number, totalField: number) {
+  const pos = (player.preferredPosition || "").toUpperCase();
+  if (player.isGoalkeeper || pos === "GK") {
+    return { top: "86%", left: "50%" };
+  }
+  if (pos === "DEF") {
+    return { top: "68%", left: index % 2 === 0 ? "35%" : "65%" };
+  }
+  if (pos === "FWD" || pos === "DEL") {
+    return { top: "18%", left: index % 2 === 0 ? "35%" : "65%" };
+  }
+  // MED o por defecto
+  const fieldSpread = [
+    { top: "45%", left: "30%" },
+    { top: "45%", left: "70%" },
+    { top: "35%", left: "50%" },
+    { top: "55%", left: "50%" },
+    { top: "25%", left: "50%" },
+  ];
+  return fieldSpread[index % fieldSpread.length] ?? { top: "50%", left: "50%" };
+}
 
 export function Pitch({
   teamName,
@@ -24,7 +44,7 @@ export function Pitch({
 }: {
   teamName: string;
   color: "claro" | "oscuro";
-  players: Player[];
+  players: PitchPlayer[];
 }) {
   const pitchRef = useRef<HTMLDivElement>(null);
   const [sharing, setSharing] = useState(false);
@@ -125,8 +145,8 @@ export function Pitch({
 
         {/* Fichas de jugadores */}
         {sortedPlayers.map((p, i) => {
-          // Si hay más de 5 jugadores, los apilamos abajo.
-          const pos = i < 5 ? DEFAULT_POSITIONS[i] : { top: "90%", left: `${20 + (i - 5) * 20}%` };
+          const pos = getTacticalCoords(p, i, sortedPlayers.filter((x) => x.isGoalkeeper).length, sortedPlayers.length);
+          const footLabel = p.preferredFoot === "L" ? " (Z)" : p.preferredFoot === "BOTH" ? " (Amb)" : "";
           
           return (
             <motion.div
@@ -136,15 +156,20 @@ export function Pitch({
               dragElastic={0}
               dragMomentum={false}
               initial={{ top: pos.top, left: pos.left, x: "-50%", y: "-50%" }}
-              className={`absolute cursor-grab active:cursor-grabbing flex flex-col items-center justify-center gap-1 z-10`}
+              className={`absolute cursor-grab active:cursor-grabbing flex flex-col items-center justify-center gap-0.5 z-10 select-none`}
             >
               {/* Círculo de la ficha */}
-              <div className={`w-10 h-10 rounded-full border-2 ring-2 ring-white/50 shadow-lg flex items-center justify-center text-sm font-bold ${bgColor}`}>
-                {p.isGoalkeeper ? "🧤" : p.name.substring(0, 1).toUpperCase()}
+              <div className={`w-11 h-11 rounded-full border-2 ring-2 ring-white/60 shadow-xl flex flex-col items-center justify-center text-xs font-black relative ${bgColor}`}>
+                <span>{p.isGoalkeeper ? "🧤" : p.name.substring(0, 1).toUpperCase()}</span>
+                {typeof p.stars === "number" && p.stars > 0 && (
+                  <span className="text-[9px] font-bold text-amber-500 leading-none">
+                    {p.stars}★
+                  </span>
+                )}
               </div>
-              {/* Nombre debajo de la ficha */}
-              <div className="bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap font-medium backdrop-blur-sm shadow-md">
-                {p.name}
+              {/* Nombre y pie debajo de la ficha */}
+              <div className="bg-black/75 text-white text-[10px] px-1.5 py-0.5 rounded-md whitespace-nowrap font-medium backdrop-blur-sm shadow-md border border-white/10">
+                {p.name}{footLabel}
               </div>
             </motion.div>
           );

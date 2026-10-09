@@ -4,12 +4,15 @@ import { getCurrentPlayer } from "@/lib/session";
 import { getCurrentMatch, getSelection, getStandings, getLastFinishedMatch } from "@/lib/queries";
 import { getPlayerComment } from "@/lib/player-comments";
 import { formatArt } from "@/lib/time";
+import { getMatchWeather } from "@/lib/weather";
+import { getMatchPaymentConfig, getMatchPlayerPayments } from "@/lib/payments";
+import { MatchPaymentCard } from "@/components/match-payment-card";
 import { Countdown } from "@/components/countdown";
 import { SignupButton } from "@/components/signup-button";
 import { TercerTiempoWidget } from "@/components/tercer-tiempo";
 import { db, matchThirdHalf, players, results } from "@/db";
 import { eq } from "drizzle-orm";
-import { CheckCircle2, Clock, CircleDashed, ArrowRight } from "lucide-react";
+import { CheckCircle2, Clock, CircleDashed, ArrowRight, CloudSun } from "lucide-react";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -102,6 +105,15 @@ export default async function GroupHomePage({
 
   const myResponse = thirdHalfRows.find((r) => r.playerId === player.id)?.staying ?? null;
 
+  const weather = await getMatchWeather(match.matchDate);
+  const paymentConfig = await getMatchPaymentConfig(match.id);
+  const playerPaymentsList = paymentConfig ? await getMatchPlayerPayments(match.id) : [];
+  const myPayment = playerPaymentsList.find((p) => p.playerId === player.id) ?? null;
+  const paidCount = playerPaymentsList.filter((p) => p.paid).length;
+  const perPlayerPrice = paymentConfig && match.capacity > 0
+    ? Math.round(paymentConfig.totalPrice / match.capacity)
+    : 0;
+
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Resumen personalizado del jugador */}
@@ -190,6 +202,28 @@ export default async function GroupHomePage({
           <div className="rounded-2xl bg-pitch-50 dark:bg-zinc-900 p-4">
             <Countdown to={new Date(match.matchDate).toISOString()} label="Falta para el partido" />
           </div>
+
+          {weather && (
+            <div className={`flex items-center justify-between p-3 rounded-2xl border text-xs shadow-xs ${weather.isRainy ? "bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800" : "bg-sky-50/70 dark:bg-sky-950/20 border-sky-200 dark:border-sky-800"}`}>
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">{weather.icon}</span>
+                <div>
+                  <p className="font-bold text-pitch-900 dark:text-zinc-100 flex items-center gap-1.5">
+                    {weather.description} • {weather.temp}°C
+                    {weather.precipProb > 0 && <span className="text-sky-600 dark:text-sky-400 font-normal">({weather.precipProb}% prob. lluvia)</span>}
+                  </p>
+                  {weather.isRainy ? (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">⚠️ Alerta de lluvia para la hora del partido.</p>
+                  ) : (
+                    <p className="text-[11px] text-pitch-900/60 dark:text-zinc-400">Pronóstico meteorológico para la hora del partido.</p>
+                  )}
+                </div>
+              </div>
+              <span className="text-[10px] uppercase font-extrabold tracking-wider text-pitch-600 dark:text-pitch-400 bg-white/90 dark:bg-zinc-800 px-2 py-1 rounded-lg border border-pitch-100 dark:border-zinc-700">
+                Clima
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -216,6 +250,22 @@ export default async function GroupHomePage({
             </p>
           )}
         </div>
+      )}
+
+      {/* Pagos de Cancha */}
+      {paymentConfig && paymentConfig.totalPrice > 0 && (
+        <MatchPaymentCard
+          matchId={match.id}
+          groupSlug={groupSlug}
+          totalPrice={paymentConfig.totalPrice}
+          perPlayerPrice={perPlayerPrice}
+          paymentAlias={paymentConfig.paymentAlias}
+          notes={paymentConfig.notes}
+          paidCount={paidCount}
+          totalPlayers={match.capacity}
+          myStatus={myPayment ? { paid: myPayment.paid, notified: myPayment.notified } : null}
+          canPay={signedUp}
+        />
       )}
 
       {/* Titulares */}

@@ -126,6 +126,8 @@ export async function getGroupMembers(groupId: number) {
       stars: players.stars,
       isHistorico: players.isHistorico,
       googleId: players.googleId,
+      preferredPosition: players.preferredPosition,
+      preferredFoot: players.preferredFoot,
     })
     .from(groupMembers)
     .innerJoin(players, eq(players.id, groupMembers.playerId))

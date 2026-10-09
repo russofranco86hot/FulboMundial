@@ -22,6 +22,8 @@ export type TeamPlayer = {
   stars: number;
   isGoalkeeper: boolean;
   isGuest: boolean;
+  preferredPosition?: string | null; // 'GK' | 'DEF' | 'MED' | 'DEL'
+  preferredFoot?: string | null; // 'R' | 'L' | 'BOTH'
 };
 
 export type TeamSplit = {
@@ -155,6 +157,21 @@ function candidate(players: TeamPlayer[], rnd: () => number): TeamSplit {
   return { teamA, teamB, starsA, starsB, avgA, avgB, diff: Math.abs(avgA - avgB) };
 }
 
+function positionalImbalance(teamA: TeamPlayer[], teamB: TeamPlayer[]): number {
+  let defA = 0, defB = 0, fwdA = 0, fwdB = 0;
+  for (const p of teamA) {
+    const pos = (p.preferredPosition || "").toUpperCase();
+    if (pos === "DEF") defA++;
+    else if (pos === "FWD" || pos === "DEL") fwdA++;
+  }
+  for (const p of teamB) {
+    const pos = (p.preferredPosition || "").toUpperCase();
+    if (pos === "DEF") defB++;
+    else if (pos === "FWD" || pos === "DEL") fwdB++;
+  }
+  return (Math.abs(defA - defB) + Math.abs(fwdA - fwdB)) * 0.12;
+}
+
 /**
  * Arma los equipos probando varias candidatas y quedándose con la más pareja.
  * `seed` permite reproducir un sorteo o variarlo al regenerar.
@@ -168,19 +185,19 @@ export function buildBalancedTeams(
     return { teamA: [], teamB: [], starsA: 0, starsB: 0, avgA: 0, avgB: 0, diff: 0 };
   }
   let best: TeamSplit | null = null;
+  let bestScore = Infinity;
+
   for (let i = 0; i < candidates; i++) {
     const rnd = mulberry32(seed + i * 2654435761);
     const c = candidate(players, rnd);
-    // Mejor = menor diferencia de promedio; desempate por diferencia de total.
-    if (
-      !best ||
-      c.diff < best.diff - 1e-9 ||
-      (Math.abs(c.diff - best.diff) < 1e-9 &&
-        Math.abs(c.starsA - c.starsB) < Math.abs(best.starsA - best.starsB))
-    ) {
+    const posPenalty = positionalImbalance(c.teamA, c.teamB);
+    const score = c.diff + posPenalty;
+
+    if (!best || score < bestScore - 1e-9 || (Math.abs(score - bestScore) < 1e-9 && Math.abs(c.starsA - c.starsB) < Math.abs(best.starsA - best.starsB))) {
       best = c;
+      bestScore = score;
     }
-    if (best.diff < 1e-9 && Math.abs(best.starsA - best.starsB) < 1e-9) break;
+    if (bestScore < 1e-9 && Math.abs(best.starsA - best.starsB) < 1e-9) break;
   }
   return best!;
 }

@@ -1,5 +1,6 @@
 import { getGroupBySlug } from "@/lib/groups";
 import { getCurrentMatch, getMatchTeams } from "@/lib/queries";
+import { getMatchGoals } from "@/lib/goals";
 import { db, results } from "@/db";
 import { eq } from "drizzle-orm";
 import { formatArt } from "@/lib/time";
@@ -30,6 +31,8 @@ export default async function GroupAdminResultado({
   const teamA = teamRows.filter((t) => t.team === "A");
   const teamB = teamRows.filter((t) => t.team === "B");
   const existing = (await db.select().from(results).where(eq(results.matchId, match.id)).limit(1))[0];
+  const matchGoalsList = await getMatchGoals(match.id);
+  const goalsMap = new Map(matchGoalsList.map((g) => [g.playerId, g]));
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -114,6 +117,100 @@ export default async function GroupAdminResultado({
             </div>
           </div>
         </div>
+
+        {/* Registro de Goleadores y Asistencias */}
+        {teamRows.some((t) => t.playerId) && (
+          <div className="space-y-3 pt-4 border-t border-pitch-100 dark:border-zinc-800">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-bold text-pitch-800 dark:text-zinc-200 flex items-center gap-1.5">
+                ⚽ Goles y Asistencias del Partido
+              </label>
+              <span className="text-[11px] text-pitch-900/50 dark:text-zinc-400">
+                (Opcional, suma a la tabla de goleadores)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Equipo Claro */}
+              <div className="p-3 rounded-2xl bg-pitch-50/50 dark:bg-zinc-800/40 border border-pitch-100 dark:border-zinc-700/60 space-y-2">
+                <span className="text-xs font-bold text-pitch-700 dark:text-pitch-400 uppercase tracking-wider block">
+                  Equipo Claro
+                </span>
+                {teamA.filter((t) => t.playerId).map((p) => {
+                  const gInfo = goalsMap.get(p.playerId!);
+                  return (
+                    <div key={p.id} className="flex items-center justify-between gap-2 text-xs py-0.5">
+                      <span className="truncate font-medium flex-1">{p.name}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-pitch-900/60 dark:text-zinc-400">⚽</span>
+                          <input
+                            type="number"
+                            name={`goals_${p.playerId}`}
+                            min={0}
+                            max={20}
+                            defaultValue={gInfo?.goals ?? 0}
+                            className="input w-12 py-1 px-1 text-center text-xs"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-pitch-900/60 dark:text-zinc-400">👟</span>
+                          <input
+                            type="number"
+                            name={`assists_${p.playerId}`}
+                            min={0}
+                            max={20}
+                            defaultValue={gInfo?.assists ?? 0}
+                            className="input w-12 py-1 px-1 text-center text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Equipo Oscuro */}
+              <div className="p-3 rounded-2xl bg-blue-50/50 dark:bg-zinc-800/40 border border-blue-100 dark:border-zinc-700/60 space-y-2">
+                <span className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider block">
+                  Equipo Oscuro
+                </span>
+                {teamB.filter((t) => t.playerId).map((p) => {
+                  const gInfo = goalsMap.get(p.playerId!);
+                  return (
+                    <div key={p.id} className="flex items-center justify-between gap-2 text-xs py-0.5">
+                      <span className="truncate font-medium flex-1">{p.name}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-blue-900/60 dark:text-zinc-400">⚽</span>
+                          <input
+                            type="number"
+                            name={`goals_${p.playerId}`}
+                            min={0}
+                            max={20}
+                            defaultValue={gInfo?.goals ?? 0}
+                            className="input w-12 py-1 px-1 text-center text-xs"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-blue-900/60 dark:text-zinc-400">👟</span>
+                          <input
+                            type="number"
+                            name={`assists_${p.playerId}`}
+                            min={0}
+                            max={20}
+                            defaultValue={gInfo?.assists ?? 0}
+                            className="input w-12 py-1 px-1 text-center text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
         
         <div className="space-y-1">
           <label className="text-sm font-bold text-pitch-800 dark:text-zinc-300 ml-1">Notas del partido</label>

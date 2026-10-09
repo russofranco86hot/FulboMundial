@@ -160,3 +160,20 @@ export async function actionRemoveMember(formData: FormData) {
 
   revalidatePath(`/grupos`);
 }
+
+// ─── Notificar transferencia de partido ──────────────────────────────────
+export async function actionPlayerNotifyTransfer(formData: FormData) {
+  const player = await getCurrentPlayer();
+  if (!player) throw new Error("No autenticado");
+
+  const matchId = Number(formData.get("matchId"));
+  const groupSlug = String(formData.get("groupSlug") || "");
+  if (!matchId) return;
+
+  const { markPlayerTransferDone } = await import("@/lib/payments");
+  await markPlayerTransferDone(matchId, player.id);
+
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}`);
+  }
+}

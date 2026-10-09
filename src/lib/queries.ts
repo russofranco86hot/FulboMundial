@@ -310,6 +310,8 @@ export async function getMatchTeams(matchId: number) {
       name: players.name,
       stars: players.stars,
       isGoalkeeper: players.isGoalkeeper,
+      preferredPosition: players.preferredPosition,
+      preferredFoot: players.preferredFoot,
     })
     .from(teams)
     .leftJoin(players, eq(players.id, teams.playerId))
@@ -322,6 +324,8 @@ export async function getMatchTeams(matchId: number) {
     stars: Number(r.stars) || 0,
     isGoalkeeper: !!r.isGoalkeeper,
     isGuest: r.isGuest,
+    preferredPosition: r.preferredPosition ?? "MED",
+    preferredFoot: r.preferredFoot ?? "R",
   }));
 }
 

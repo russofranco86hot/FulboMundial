@@ -1,4 +1,5 @@
 import { getMatchDetails, getMatchNotes, getMatchVotes } from "@/lib/queries";
+import { getMatchGoals } from "@/lib/goals";
 import { getCurrentPlayer } from "@/lib/session";
 import { getGroupBySlug } from "@/lib/groups";
 import { formatArt } from "@/lib/time";
@@ -26,6 +27,7 @@ export default async function GroupMatchDetailPage({
 
   const notes = await getMatchNotes(matchId);
   const votes = await getMatchVotes(matchId);
+  const matchGoals = await getMatchGoals(matchId);
   const player = await getCurrentPlayer();
   const teamA = match.teams.filter((t) => t.team === "A");
   const teamB = match.teams.filter((t) => t.team === "B");
@@ -104,6 +106,37 @@ export default async function GroupMatchDetailPage({
           </div>
         )}
       </div>
+
+      {/* Goles y asistencias del partido */}
+      {matchGoals.length > 0 && (
+        <div className="card space-y-3 bg-gradient-to-br from-pitch-50/40 to-white dark:from-zinc-900 dark:to-zinc-950 border-pitch-200/60 dark:border-zinc-800">
+          <h3 className="font-bold text-sm text-pitch-800 dark:text-zinc-100 flex items-center gap-1.5">
+            <span>⚽</span> Goleadores del Partido
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {matchGoals.map((g) => (
+              <div
+                key={g.id}
+                className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-800/80 border border-pitch-100 dark:border-zinc-700/60 text-xs"
+              >
+                <span className="font-semibold truncate">{g.name}</span>
+                <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                  {g.goals > 0 && (
+                    <span className="chip bg-pitch-100 text-pitch-800 dark:bg-pitch-900/40 dark:text-pitch-300 font-extrabold px-1.5 py-0.5 text-[11px]">
+                      ⚽ {g.goals}
+                    </span>
+                  )}
+                  {g.assists > 0 && (
+                    <span className="chip bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 font-bold px-1.5 py-0.5 text-[11px]">
+                      👟 {g.assists}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <MatchDetailClient 
         matchId={matchId} 

@@ -164,3 +164,33 @@ export async function registerOrSetPassword(params: {
 
   return { ok: true, playerId: targetPlayerId };
 }
+
+export async function adminResetPlayerPassword(playerId: number, newPassword: string) {
+  await ensureCredentialsTable();
+  if (newPassword.length < 6) {
+    return { ok: false, error: "La contraseña debe tener al menos 6 caracteres." };
+  }
+  const player = (
+    await db
+      .select({ id: players.id, email: players.email })
+      .from(players)
+      .where(eq(players.id, playerId))
+      .limit(1)
+  )[0];
+
+  if (!player || !player.email) {
+    return { ok: false, error: "El jugador no existe o no tiene un correo asignado." };
+  }
+
+  const normalizedEmail = player.email.toLowerCase().trim();
+  const passHash = hashPassword(newPassword);
+
+  await db.execute(sql`
+    INSERT INTO player_credentials (player_id, email, password_hash, created_at)
+    VALUES (${player.id}, ${normalizedEmail}, ${passHash}, NOW())
+    ON CONFLICT (email) DO UPDATE
+    SET password_hash = ${passHash}, player_id = ${player.id}
+  `);
+
+  return { ok: true };
+}
