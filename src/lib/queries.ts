@@ -341,6 +341,8 @@ export async function getGroupPlayers(groupId: number): Promise<Player[]> {
       isGuest: players.isGuest,
       isGoalkeeper: players.isGoalkeeper,
       stars: players.stars,
+      preferredPosition: players.preferredPosition,
+      preferredFoot: players.preferredFoot,
       adjWon: players.adjWon,
       adjDrawn: players.adjDrawn,
       adjLost: players.adjLost,
