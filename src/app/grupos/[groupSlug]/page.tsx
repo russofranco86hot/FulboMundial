@@ -43,6 +43,8 @@ export default async function GroupHomePage({
   const lastFinishedTeamAName = lastFinished?.teamAName || group.teamAName || "Claro";
   const lastFinishedTeamBName = lastFinished?.teamBName || group.teamBName || "Oscuro";
 
+  const match = await getCurrentMatch(group.id);
+
   if (!match) {
     return (
       <div className="space-y-5 animate-fade-in">
