@@ -13,6 +13,8 @@ import {
   adminGroupTogglePlayerPaid,
   adminGroupUpdateMatch,
   adminGroupClearTeams,
+  adminGroupDeleteMatch,
+  adminGroupFinishMatchWithoutResult,
 } from "../actions";
 import { getMatchPaymentConfig, getMatchPlayerPayments } from "@/lib/payments";
 import { TeamEditor, type TeamRow } from "@/components/team-editor";
@@ -318,9 +320,29 @@ export default async function GroupAdminPartido({
               />
             </div>
           </div>
-          <button type="submit" className="btn-primary py-2 px-4 text-xs font-bold shadow-sm">
-            Guardar cambios del partido
-          </button>
+          <div className="flex items-center justify-between pt-3 border-t border-zinc-200 dark:border-zinc-700 flex-wrap gap-2">
+            <button type="submit" className="btn-primary py-2 px-4 text-xs font-bold shadow-sm">
+              Guardar cambios del partido
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                formAction={adminGroupFinishMatchWithoutResult}
+                className="btn-ghost py-2 px-3 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-amber-300 dark:border-amber-800"
+                title="Cierra este partido sin computar resultado para pasar al siguiente"
+              >
+                🏁 Finalizar sin jugar
+              </button>
+              <button
+                type="submit"
+                formAction={adminGroupDeleteMatch}
+                className="btn-ghost py-2 px-3 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900/40"
+                title="Elimina este partido completamente"
+              >
+                🗑️ Eliminar partido
+              </button>
+            </div>
+          </div>
         </form>
       </details>
 

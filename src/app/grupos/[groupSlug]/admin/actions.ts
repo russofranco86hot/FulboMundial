@@ -108,7 +108,12 @@ export async function adminGroupUpdateMatch(formData: FormData) {
 
   await db.update(matches).set(updates).where(eq(matches.id, matchId));
   refreshGroup(groupSlug);
-  redirect(`/grupos/${groupSlug}/admin/partido?matchId=${matchId}&saved=1`);
+
+  const returnTo = String(formData.get("returnTo") || "").trim();
+  const targetUrl = returnTo
+    ? (returnTo.includes("?") ? `${returnTo}&saved=1` : `${returnTo}?saved=1`)
+    : `/grupos/${groupSlug}/admin/partido?matchId=${matchId}&saved=1`;
+  redirect(targetUrl);
 }
 
 export async function adminCloseGroupMatch(formData: FormData) {
@@ -116,7 +121,10 @@ export async function adminCloseGroupMatch(formData: FormData) {
   const groupSlug = String(formData.get("groupSlug"));
   await requireGroupAdmin(groupId);
 
-  const match = await getCurrentMatch(groupId);
+  const formMatchId = Number(formData.get("matchId"));
+  const match = formMatchId
+    ? (await db.select().from(matches).where(eq(matches.id, formMatchId)).limit(1))[0]
+    : await getCurrentMatch(groupId);
   if (match && match.status === "open") {
     await closeSignups(match, { notify: true });
   }
@@ -128,11 +136,47 @@ export async function adminReopenGroupMatch(formData: FormData) {
   const groupSlug = String(formData.get("groupSlug"));
   await requireGroupAdmin(groupId);
 
-  const match = await getCurrentMatch(groupId);
+  const formMatchId = Number(formData.get("matchId"));
+  const match = formMatchId
+    ? (await db.select().from(matches).where(eq(matches.id, formMatchId)).limit(1))[0]
+    : await getCurrentMatch(groupId);
   if (match) {
     await db.update(matches).set({ status: "open" }).where(eq(matches.id, match.id));
   }
   refreshGroup(groupSlug);
+}
+
+export async function adminGroupFinishMatchWithoutResult(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  const matchId = Number(formData.get("matchId"));
+  if (!matchId) return;
+
+  await db
+    .update(matches)
+    .set({ status: "finished" })
+    .where(and(eq(matches.id, matchId), eq(matches.groupId, groupId)));
+
+  refreshGroup(groupSlug);
+  redirect(`/grupos/${groupSlug}/admin?finished=1`);
+}
+
+export async function adminGroupDeleteMatch(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  const matchId = Number(formData.get("matchId"));
+  if (!matchId) return;
+
+  await db
+    .delete(matches)
+    .where(and(eq(matches.id, matchId), eq(matches.groupId, groupId)));
+
+  refreshGroup(groupSlug);
+  redirect(`/grupos/${groupSlug}/admin?deleted=1`);
 }
 
 export async function adminGroupToggleSignup(formData: FormData) {
