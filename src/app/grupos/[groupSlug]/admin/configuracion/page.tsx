@@ -205,6 +205,58 @@ export default async function GroupAdminConfigPage({
           </div>
         </div>
 
+        {/* ─── Nombres de los Equipos ─── */}
+        <div className="card space-y-4 border-pitch-200/80 dark:border-zinc-800">
+          <div className="flex items-center gap-2 border-b border-pitch-100/60 dark:border-zinc-800 pb-2">
+            <span className="text-xl">👕</span>
+            <h2 className="font-bold text-pitch-800 dark:text-zinc-100">
+              Nombres de los Equipos (Por Defecto)
+            </h2>
+          </div>
+
+          <p className="text-xs text-pitch-900/60 dark:text-zinc-400">
+            Personalizá cómo se llaman los 2 bandos de tu grupo en lugar del clásico Claro vs Oscuro.
+            Por ejemplo: <em>"Pechera" vs "Sin pechera"</em>, <em>"Blancas" vs "Negras"</em>, o los nombres que ustedes usen.
+            Se aplicará en toda la app: Cancha 2D, Equipos, Resultado, Historial y WhatsApp.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="p-3.5 rounded-2xl bg-pitch-50/50 dark:bg-zinc-800/40 border border-pitch-200 dark:border-zinc-700">
+              <label className="block text-xs font-bold text-pitch-700 dark:text-pitch-400 mb-1 flex items-center gap-1.5">
+                <span>⚪</span> Nombre Equipo A
+              </label>
+              <input
+                type="text"
+                name="teamAName"
+                defaultValue={group.teamAName ?? "Claro"}
+                placeholder="Ej: Pechera, Blancas, Claro..."
+                className="input w-full font-bold"
+                required
+              />
+              <span className="text-[11px] text-pitch-900/50 dark:text-zinc-400 mt-1 block">
+                Bando titular A (habitualmente camisetas claras / con pechera)
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-blue-50/50 dark:bg-zinc-800/40 border border-blue-200 dark:border-zinc-700">
+              <label className="block text-xs font-bold text-blue-700 dark:text-blue-400 mb-1 flex items-center gap-1.5">
+                <span>⚫</span> Nombre Equipo B
+              </label>
+              <input
+                type="text"
+                name="teamBName"
+                defaultValue={group.teamBName ?? "Oscuro"}
+                placeholder="Ej: Sin pechera, Negras, Oscuro..."
+                className="input w-full font-bold"
+                required
+              />
+              <span className="text-[11px] text-blue-900/50 dark:text-zinc-400 mt-1 block">
+                Bando rival B (habitualmente camisetas oscuras / sin pechera)
+              </span>
+            </div>
+          </div>
+        </div>
+
         <button type="submit" className="btn-primary w-full py-3 font-bold text-base shadow-glow-green">
           💾 Guardar configuración
         </button>

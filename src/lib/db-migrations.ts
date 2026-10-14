@@ -78,6 +78,16 @@ export async function ensureDbUpgrades() {
       console.warn("Migration notice (groups points columns):", e);
     }
 
+    // 6. Nombres de equipos personalizados en groups y matches
+    try {
+      await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS team_a_name TEXT NOT NULL DEFAULT 'Claro';`);
+      await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS team_b_name TEXT NOT NULL DEFAULT 'Oscuro';`);
+      await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS team_a_name TEXT;`);
+      await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS team_b_name TEXT;`);
+    } catch (e) {
+      console.warn("Migration notice (team names columns):", e);
+    }
+
     migrationsRun = true;
   } catch (err) {
     console.error("Error running DB upgrades:", err);

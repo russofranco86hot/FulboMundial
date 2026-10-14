@@ -55,7 +55,9 @@ export function waTeamsMessage(
   matchDate: Date,
   teamA: { name: string; isGoalkeeper?: boolean }[],
   teamB: { name: string; isGoalkeeper?: boolean }[],
-  appUrl?: string
+  appUrl?: string,
+  teamAName: string = "Equipo Claro",
+  teamBName: string = "Equipo Oscuro"
 ): string {
   const cuando = formatArt(matchDate, "EEEE dd/MM HH:mm");
   const fmt = (list: { name: string; isGoalkeeper?: boolean }[]) =>
@@ -66,10 +68,10 @@ export function waTeamsMessage(
   const lines = [
     `⚽ *Equipos — ${cuando}*`,
     "",
-    "⚪ *Equipo Claro*",
+    `⚪ *${teamAName}*`,
     fmt(teamA),
     "",
-    "⚫ *Equipo Oscuro*",
+    `⚫ *${teamBName}*`,
     fmt(teamB),
   ];
   if (appUrl) lines.push("", appUrl);

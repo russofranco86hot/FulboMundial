@@ -179,6 +179,8 @@ export async function getPlayerGroups(): Promise<
       ptsWin: groups.ptsWin,
       ptsDraw: groups.ptsDraw,
       ptsLoss: groups.ptsLoss,
+      teamAName: groups.teamAName,
+      teamBName: groups.teamBName,
       createdBy: groups.createdBy,
       createdAt: groups.createdAt,
       role: groupMembers.role,

@@ -138,10 +138,12 @@ export default async function GroupAdminPartido({
   }));
   const teamsSig = editorRows.map((r) => `${r.id}:${r.team}`).join(",");
 
+  const teamAName = match.teamAName || group.teamAName || "Claro";
+  const teamBName = match.teamBName || group.teamBName || "Oscuro";
   const listMsg = waListMessage(match.matchDate, selection, appUrl);
   const teamAList = editorRows.filter((r) => r.team === "A");
   const teamBList = editorRows.filter((r) => r.team === "B");
-  const teamsMsg = waTeamsMessage(match.matchDate, teamAList, teamBList, appUrl);
+  const teamsMsg = waTeamsMessage(match.matchDate, teamAList, teamBList, appUrl, teamAName, teamBName);
 
   const titularesCount = selection.filter((s) => s.status === "playing").length;
   const suplentesCount = selection.filter((s) => s.status === "substitute").length;
@@ -319,6 +321,26 @@ export default async function GroupAdminPartido({
                 required
               />
             </div>
+            <div>
+              <label className="block font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Nombre Equipo A</label>
+              <input
+                type="text"
+                name="teamAName"
+                defaultValue={match.teamAName ?? group.teamAName ?? "Claro"}
+                placeholder="Ej: Pechera, Blancas..."
+                className="input w-full"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Nombre Equipo B</label>
+              <input
+                type="text"
+                name="teamBName"
+                defaultValue={match.teamBName ?? group.teamBName ?? "Oscuro"}
+                placeholder="Ej: Sin pechera, Negras..."
+                className="input w-full"
+              />
+            </div>
           </div>
           <div className="flex items-center justify-between pt-3 border-t border-zinc-200 dark:border-zinc-700 flex-wrap gap-2">
             <button type="submit" className="btn-primary py-2 px-4 text-xs font-bold shadow-sm">
@@ -478,7 +500,7 @@ export default async function GroupAdminPartido({
           </div>
         </div>
 
-        <TeamEditor key={teamsSig} rows={editorRows} groupSlug={group.slug} />
+        <TeamEditor key={teamsSig} rows={editorRows} groupSlug={group.slug} titleA={teamAName} titleB={teamBName} />
 
         <details className="rounded-2xl bg-zinc-50 dark:bg-zinc-800/30 border border-zinc-200 dark:border-zinc-700 p-4">
           <summary className="cursor-pointer text-sm font-bold text-zinc-700 dark:text-zinc-300">
@@ -507,7 +529,7 @@ export default async function GroupAdminPartido({
                       <input type="hidden" name="playerId" value={p.id} />
                       <input type="hidden" name="team" value="A" />
                       <button className="rounded-lg bg-pitch-50 hover:bg-pitch-100 dark:bg-pitch-900/20 dark:hover:bg-pitch-900/40 border border-pitch-200 dark:border-pitch-800 px-2.5 py-1.5 text-xs font-bold text-pitch-700 dark:text-pitch-400 transition-colors">
-                        → Claro
+                        → {teamAName}
                       </button>
                     </form>
                     <form action={adminGroupAddPlayerToTeam}>
@@ -517,7 +539,7 @@ export default async function GroupAdminPartido({
                       <input type="hidden" name="playerId" value={p.id} />
                       <input type="hidden" name="team" value="B" />
                       <button className="rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-800 px-2.5 py-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 transition-colors">
-                        → Oscuro
+                        → {teamBName}
                       </button>
                     </form>
                   </div>
@@ -537,9 +559,9 @@ export default async function GroupAdminPartido({
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs">⭐</span>
               <input type="number" name="stars" step="0.5" min="0" max="5" defaultValue="3" className="input w-full pl-6 py-2 text-center" />
             </div>
-            <select name="team" className="input w-24 py-2 shrink-0 bg-white dark:bg-zinc-800 font-medium text-sm">
-              <option value="A">Claro</option>
-              <option value="B">Oscuro</option>
+            <select name="team" className="input w-28 py-2 shrink-0 bg-white dark:bg-zinc-800 font-medium text-xs">
+              <option value="A">{teamAName}</option>
+              <option value="B">{teamBName}</option>
             </select>
           </div>
           <button className="btn-ghost w-full py-2 text-sm bg-white hover:bg-amber-50 border-amber-200 text-amber-700 dark:bg-zinc-800 dark:border-amber-900/50 dark:text-amber-400">

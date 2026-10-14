@@ -80,6 +80,9 @@ export default async function GroupAdminResultado({
   }));
   const teamsSig = editorRows.map((r) => `${r.id}:${r.team}`).join(",");
 
+  const teamAName = match.teamAName || group.teamAName || "Claro";
+  const teamBName = match.teamBName || group.teamBName || "Oscuro";
+
   return (
     <div className="space-y-4 animate-fade-in">
       {saved === "1" && (
@@ -184,7 +187,7 @@ export default async function GroupAdminResultado({
               Arrastrá cualquier jugador para intercambiar de equipo
             </span>
           </div>
-          <TeamEditor key={teamsSig} rows={editorRows} groupSlug={group.slug} />
+          <TeamEditor key={teamsSig} rows={editorRows} groupSlug={group.slug} titleA={teamAName} titleB={teamBName} />
         </div>
       )}
 
@@ -196,7 +199,7 @@ export default async function GroupAdminResultado({
 
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-pitch-50 dark:bg-pitch-900/10 rounded-2xl p-4 border border-pitch-100 dark:border-pitch-900/30 flex flex-col items-center shadow-sm">
-            <div className="mb-3 text-sm font-extrabold text-pitch-700 uppercase tracking-wider">Equipo Claro</div>
+            <div className="mb-3 text-sm font-extrabold text-pitch-700 uppercase tracking-wider">{teamAName}</div>
             <input
               type="number"
               name="scoreA"
@@ -215,7 +218,7 @@ export default async function GroupAdminResultado({
           </div>
           
           <div className="bg-blue-50 dark:bg-blue-900/10 rounded-2xl p-4 border border-blue-100 dark:border-blue-900/30 flex flex-col items-center shadow-sm">
-            <div className="mb-3 text-sm font-extrabold text-blue-700 dark:text-blue-400 uppercase tracking-wider">Equipo Oscuro</div>
+            <div className="mb-3 text-sm font-extrabold text-blue-700 dark:text-blue-400 uppercase tracking-wider">{teamBName}</div>
             <input
               type="number"
               name="scoreB"
@@ -247,10 +250,10 @@ export default async function GroupAdminResultado({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Equipo Claro */}
+              {/* Equipo Claro / A */}
               <div className="p-3 rounded-2xl bg-pitch-50/50 dark:bg-zinc-800/40 border border-pitch-100 dark:border-zinc-700/60 space-y-2">
                 <span className="text-xs font-bold text-pitch-700 dark:text-pitch-400 uppercase tracking-wider block">
-                  Equipo Claro
+                  {teamAName}
                 </span>
                 {teamA.filter((t) => t.playerId).map((p) => {
                   const gInfo = goalsMap.get(p.playerId!);
@@ -286,10 +289,10 @@ export default async function GroupAdminResultado({
                 })}
               </div>
 
-              {/* Equipo Oscuro */}
+              {/* Equipo Oscuro / B */}
               <div className="p-3 rounded-2xl bg-blue-50/50 dark:bg-zinc-800/40 border border-blue-100 dark:border-zinc-700/60 space-y-2">
                 <span className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider block">
-                  Equipo Oscuro
+                  {teamBName}
                 </span>
                 {teamB.filter((t) => t.playerId).map((p) => {
                   const gInfo = goalsMap.get(p.playerId!);

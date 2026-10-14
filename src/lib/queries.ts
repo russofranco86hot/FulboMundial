@@ -429,6 +429,8 @@ export async function getRecentMatches(groupId?: number, limitN = 5) {
       scoreB: results.scoreB,
       result: results.result,
       notes: results.notes,
+      teamAName: matches.teamAName,
+      teamBName: matches.teamBName,
     })
     .from(matches)
     .innerJoin(results, eq(matches.id, results.matchId))
@@ -486,6 +488,8 @@ export async function getMatchDetails(matchId: number) {
       scoreB: results.scoreB,
       result: results.result,
       notes: results.notes,
+      teamAName: matches.teamAName,
+      teamBName: matches.teamBName,
     })
     .from(matches)
     .leftJoin(results, eq(matches.id, results.matchId))
@@ -547,6 +551,8 @@ export async function getLastFinishedMatch(groupId?: number) {
       scoreB: results.scoreB,
       result: results.result,
       notes: results.notes,
+      teamAName: matches.teamAName,
+      teamBName: matches.teamBName,
     })
     .from(matches)
     .innerJoin(results, eq(matches.id, results.matchId))

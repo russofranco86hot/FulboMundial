@@ -11,10 +11,14 @@ export function EquiposClientView({
   dateText,
   teamA,
   teamB,
+  teamAName = "Equipo Claro",
+  teamBName = "Equipo Oscuro",
 }: {
   dateText: string;
   teamA: EquiposPlayer[];
   teamB: EquiposPlayer[];
+  teamAName?: string;
+  teamBName?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [sharing, setSharing] = useState(false);
@@ -37,7 +41,7 @@ export function EquiposClientView({
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           title: "Equipos Confirmados ⚽",
-          text: `Formaciones para el partido del ${dateText}:`,
+          text: `Formaciones para el partido del ${dateText}: ${teamAName} vs ${teamBName}`,
           files: [file],
         });
       } else {
@@ -116,7 +120,7 @@ export function EquiposClientView({
 
         {viewMode === "pitch" ? (
           <div className="space-y-4">
-            <Pitch teamName="Equipo Claro" color="claro" players={teamA} />
+            <Pitch teamName={teamAName} color="claro" players={teamA} />
 
             <div className="flex justify-center -my-3 relative z-10">
               <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-black text-sm shadow-xl bg-gradient-to-r from-emerald-500 to-pitch-600 border-2 border-white/30">
@@ -124,16 +128,16 @@ export function EquiposClientView({
               </div>
             </div>
 
-            <Pitch teamName="Equipo Oscuro" color="oscuro" players={teamB} />
+            <Pitch teamName={teamBName} color="oscuro" players={teamB} />
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Tarjeta Equipo Claro */}
+            {/* Tarjeta Equipo A */}
             <div className="bg-white/95 dark:bg-zinc-900/95 text-pitch-950 dark:text-white rounded-2xl p-4 border border-pitch-200/50 shadow-md space-y-3">
               <div className="flex items-center justify-between border-b border-pitch-100 dark:border-zinc-800 pb-2">
                 <div>
                   <h3 className="font-extrabold text-base text-pitch-700 dark:text-pitch-400 uppercase tracking-wide">
-                    Equipo Claro
+                    {teamAName}
                   </h3>
                   <span className="text-[11px] text-pitch-900/60 dark:text-zinc-400">
                     {teamA.length} jugadores • Promedio {avgA}★
@@ -188,12 +192,12 @@ export function EquiposClientView({
               </div>
             </div>
 
-            {/* Tarjeta Equipo Oscuro */}
+            {/* Tarjeta Equipo B */}
             <div className="bg-zinc-900/95 text-white rounded-2xl p-4 border border-zinc-800 shadow-md space-y-3">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                 <div>
                   <h3 className="font-extrabold text-base text-blue-400 uppercase tracking-wide">
-                    Equipo Oscuro
+                    {teamBName}
                   </h3>
                   <span className="text-[11px] text-zinc-400">
                     {teamB.length} jugadores • Promedio {avgB}★

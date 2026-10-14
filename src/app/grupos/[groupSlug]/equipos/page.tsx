@@ -48,12 +48,17 @@ export default async function GroupEquiposPage({
     );
   }
 
+  const teamAName = match.teamAName || group.teamAName || "Equipo Claro";
+  const teamBName = match.teamBName || group.teamBName || "Equipo Oscuro";
+
   return (
     <Wrap groupName={group.name}>
       <EquiposClientView 
         dateText={formatArt(match.matchDate, "EEEE dd/MM 'a las' HH:mm")}
         teamA={teamA}
         teamB={teamB}
+        teamAName={teamAName}
+        teamBName={teamBName}
       />
     </Wrap>
   );

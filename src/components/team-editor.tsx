@@ -20,9 +20,13 @@ export type TeamRow = {
 export function TeamEditor({
   rows: initial,
   groupSlug,
+  titleA = "Claro",
+  titleB = "Oscuro",
 }: {
   rows: TeamRow[];
   groupSlug?: string;
+  titleA?: string;
+  titleB?: string;
 }) {
   const [rows, setRows] = useState<TeamRow[]>(initial);
   const [dragId, setDragId] = useState<number | null>(null);
@@ -88,7 +92,7 @@ export function TeamEditor({
       <div className="grid grid-cols-2 gap-3">
         <Column
           innerRef={zoneA}
-          title="Claro"
+          title={titleA}
           headerBg="bg-pitch-50 dark:bg-pitch-900/20"
           titleColor="text-pitch-700 dark:text-pitch-400"
           borderColor={hover === "A" ? "border-pitch-500" : "border-pitch-200 dark:border-pitch-900/50"}
@@ -104,7 +108,7 @@ export function TeamEditor({
         />
         <Column
           innerRef={zoneB}
-          title="Oscuro"
+          title={titleB}
           headerBg="bg-blue-50 dark:bg-blue-900/20"
           titleColor="text-blue-700 dark:text-blue-400"
           borderColor={hover === "B" ? "border-blue-500" : "border-blue-200 dark:border-blue-900/50"}

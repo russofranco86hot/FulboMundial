@@ -40,6 +40,9 @@ export default async function GroupMatchDetailPage({
   const isDraw = hasResult && scoreA === scoreB;
   const isAdmin = await isGroupAdmin(group.id);
 
+  const teamAName = match.teamAName || group.teamAName || "Claro";
+  const teamBName = match.teamBName || group.teamBName || "Oscuro";
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center gap-4 flex-wrap">
@@ -69,7 +72,7 @@ export default async function GroupMatchDetailPage({
       <div className="card space-y-4">
         <div className="flex justify-between items-center px-4 py-6 bg-pitch-50/80 dark:bg-zinc-800/50 rounded-2xl">
           <div className="text-center flex-1 flex flex-col items-center">
-            <h3 className="font-bold text-pitch-700 dark:text-pitch-400 mb-1">Claro</h3>
+            <h3 className="font-bold text-pitch-700 dark:text-pitch-400 mb-1">{teamAName}</h3>
             <span className={`text-5xl font-black ${isWinnerA ? 'text-pitch-600' : 'text-zinc-700 dark:text-zinc-300'}`}>
               {match.scoreA}
             </span>
@@ -78,7 +81,7 @@ export default async function GroupMatchDetailPage({
           </div>
           <div className="text-center text-pitch-900/30 dark:text-zinc-600 font-black text-2xl px-4">-</div>
           <div className="text-center flex-1 flex flex-col items-center">
-            <h3 className="font-bold text-pitch-700 dark:text-blue-400 mb-1">Oscuro</h3>
+            <h3 className="font-bold text-pitch-700 dark:text-blue-400 mb-1">{teamBName}</h3>
             <span className={`text-5xl font-black ${isWinnerB ? 'text-pitch-600' : 'text-zinc-700 dark:text-zinc-300'}`}>
               {match.scoreB}
             </span>

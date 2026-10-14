@@ -51,7 +51,12 @@ export async function createGroup(opts: {
   defaultDayOfWeek?: number;
   defaultTime?: string;
   creatorPlayerId: number;
+  teamAName?: string;
+  teamBName?: string;
 }): Promise<Group> {
+  const { ensureDbUpgrades } = await import("./db-migrations");
+  await ensureDbUpgrades();
+
   const baseSlug = nameToSlug(opts.name);
   const slug = await uniqueSlug(baseSlug);
 
@@ -79,6 +84,8 @@ export async function createGroup(opts: {
       defaultDayOfWeek: opts.defaultDayOfWeek,
       defaultTime: opts.defaultTime,
       inviteCode,
+      ...(opts.teamAName ? { teamAName: opts.teamAName } : {}),
+      ...(opts.teamBName ? { teamBName: opts.teamBName } : {}),
       createdBy: opts.creatorPlayerId,
     })
     .returning();
@@ -96,12 +103,16 @@ export async function createGroup(opts: {
 
 /** Busca un grupo por slug. */
 export async function getGroupBySlug(slug: string): Promise<Group | null> {
+  const { ensureDbUpgrades } = await import("./db-migrations");
+  await ensureDbUpgrades();
   const rows = await db.select().from(groups).where(eq(groups.slug, slug)).limit(1);
   return rows[0] ?? null;
 }
 
 /** Busca un grupo por código de invitación. */
 export async function getGroupByInviteCode(code: string): Promise<Group | null> {
+  const { ensureDbUpgrades } = await import("./db-migrations");
+  await ensureDbUpgrades();
   const rows = await db
     .select()
     .from(groups)

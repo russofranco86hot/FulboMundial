@@ -10,6 +10,8 @@ type FinishMatchParams = {
   notes?: string | null;
   oldStandings: StandingRow[];
   oldStats: Awaited<ReturnType<typeof getAdvancedStats>>;
+  teamAName?: string;
+  teamBName?: string;
 };
 
 /**
@@ -23,13 +25,15 @@ export async function notifyMatchCompletionAndAchievements({
   notes,
   oldStandings,
   oldStats,
+  teamAName = "Claro",
+  teamBName = "Oscuro",
 }: FinishMatchParams) {
   try {
     // 1. Notificación general a todos los usuarios: resultado, nota y recordatorio de votación
     const notePreview = notes && notes.trim() ? " ya podés leer la crónica oficial" : " ya podés ver el resumen";
     await pushToAll({
       title: "¡Partido finalizado! ⚽",
-      body: `Claro ${scoreA} - ${scoreB} Oscuro:${notePreview} y votar a la Figura (MVP), el Tronco y el Mejor Gol 🏆`,
+      body: `${teamAName} ${scoreA} - ${scoreB} ${teamBName}:${notePreview} y votar a la Figura (MVP), el Tronco y el Mejor Gol 🏆`,
       url: `/historial/${matchId}`,
       tag: `match-finished-${matchId}`,
     });

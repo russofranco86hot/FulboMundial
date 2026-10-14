@@ -32,6 +32,8 @@ export async function openNextMatch(opts: {
   capacity?: number;
   format?: string;
   notify?: boolean;
+  teamAName?: string;
+  teamBName?: string;
 } = {}): Promise<Match> {
   let targetGroupId = opts.groupId;
   if (!targetGroupId) {
@@ -65,6 +67,8 @@ export async function openNextMatch(opts: {
         signupClosesAt: closesAt,
         capacity,
         format,
+        ...(opts.teamAName ? { teamAName: opts.teamAName } : {}),
+        ...(opts.teamBName ? { teamBName: opts.teamBName } : {}),
       })
       .where(eq(matches.id, existing[0].id))
       .returning();
@@ -80,6 +84,8 @@ export async function openNextMatch(opts: {
         status: "open",
         capacity,
         format,
+        ...(opts.teamAName ? { teamAName: opts.teamAName } : {}),
+        ...(opts.teamBName ? { teamBName: opts.teamBName } : {}),
       })
       .returning();
     match = inserted[0]!;

@@ -66,6 +66,8 @@ export const groups = pgTable(
     ptsWin: integer("pts_win").notNull().default(3),
     ptsDraw: integer("pts_draw").notNull().default(2),
     ptsLoss: integer("pts_loss").notNull().default(1),
+    teamAName: text("team_a_name").notNull().default("Claro"),
+    teamBName: text("team_b_name").notNull().default("Oscuro"),
     createdBy: integer("created_by").references(() => players.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -131,6 +133,8 @@ export const matches = pgTable("matches", {
   status: matchStatusEnum("status").notNull().default("open"),
   capacity: integer("capacity").notNull().default(10),
   format: text("format").notNull().default("F5"),
+  teamAName: text("team_a_name"),
+  teamBName: text("team_b_name"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

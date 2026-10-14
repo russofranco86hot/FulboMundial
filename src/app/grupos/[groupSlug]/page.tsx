@@ -40,7 +40,8 @@ export default async function GroupHomePage({
   const rankIndex = standings.findIndex((s) => s.playerId === player.id);
   const playerRank = rankIndex !== -1 ? rankIndex + 1 : undefined;
 
-  const match = await getCurrentMatch(group.id);
+  const lastFinishedTeamAName = lastFinished?.teamAName || group.teamAName || "Claro";
+  const lastFinishedTeamBName = lastFinished?.teamBName || group.teamBName || "Oscuro";
 
   if (!match) {
     return (
@@ -61,12 +62,12 @@ export default async function GroupHomePage({
             </div>
             <div className="flex items-center justify-between px-6 py-3 bg-white/80 dark:bg-zinc-800/80 rounded-2xl border border-pitch-100 dark:border-zinc-700 shadow-sm">
               <div className="text-center flex-1">
-                <span className="text-xs font-bold text-pitch-700 dark:text-pitch-400 uppercase">Claro</span>
+                <span className="text-xs font-bold text-pitch-700 dark:text-pitch-400 uppercase">{lastFinishedTeamAName}</span>
                 <p className="text-3xl font-black">{lastFinished.scoreA}</p>
               </div>
               <span className="text-xl font-bold text-zinc-300 dark:text-zinc-600 px-3">-</span>
               <div className="text-center flex-1">
-                <span className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase">Oscuro</span>
+                <span className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase">{lastFinishedTeamBName}</span>
                 <p className="text-3xl font-black">{lastFinished.scoreB}</p>
               </div>
             </div>
@@ -116,6 +117,9 @@ export default async function GroupHomePage({
     ? Math.round(paymentConfig.totalPrice / match.capacity)
     : 0;
 
+  const matchTeamAName = match.teamAName || group.teamAName || "Claro";
+  const matchTeamBName = match.teamBName || group.teamBName || "Oscuro";
+
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Resumen personalizado del jugador */}
@@ -137,7 +141,7 @@ export default async function GroupHomePage({
                   ¡Partido del {formatArt(lastFinished.matchDate, "dd/MM")} cerrado!
                 </p>
                 <p className="text-xs text-pitch-900/70 dark:text-zinc-300">
-                  Claro {lastFinished.scoreA} - {lastFinished.scoreB} Oscuro. ¡Votá a la figura!
+                  {lastFinishedTeamAName} {lastFinished.scoreA} - {lastFinished.scoreB} {lastFinishedTeamBName}. ¡Votá a la figura!
                 </p>
               </div>
             </div>
@@ -166,12 +170,12 @@ export default async function GroupHomePage({
           {currentResult && (
             <div className="flex items-center justify-between px-6 py-4 bg-white/80 dark:bg-zinc-800/80 rounded-2xl border border-pitch-100 dark:border-zinc-700 shadow-sm">
               <div className="text-center flex-1">
-                <span className="text-xs font-bold text-pitch-700 dark:text-pitch-400 uppercase tracking-wide">Claro</span>
+                <span className="text-xs font-bold text-pitch-700 dark:text-pitch-400 uppercase tracking-wide">{matchTeamAName}</span>
                 <p className="text-4xl font-black">{currentResult.scoreA}</p>
               </div>
               <span className="text-2xl font-bold text-zinc-300 dark:text-zinc-600 px-3">-</span>
               <div className="text-center flex-1">
-                <span className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wide">Oscuro</span>
+                <span className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wide">{matchTeamBName}</span>
                 <p className="text-4xl font-black">{currentResult.scoreB}</p>
               </div>
             </div>

@@ -200,6 +200,8 @@ export default async function GroupHistorialPage({
               const teamB = m.teams.filter((t) => t.team === "B");
               const isWinnerA = m.result === "A";
               const isWinnerB = m.result === "B";
+              const matchTeamAName = m.teamAName || group.teamAName || "Equipo Claro";
+              const matchTeamBName = m.teamBName || group.teamBName || "Equipo Oscuro";
 
               return (
                 <div key={m.id} className="card w-full space-y-3 hover:-translate-y-0.5 transition-all duration-300">
@@ -210,7 +212,7 @@ export default async function GroupHistorialPage({
                   <div className="flex items-start relative">
                     <div className="flex-1 text-center px-2">
                       <div className={`font-semibold text-sm mb-2 ${isWinnerA ? 'font-bold text-pitch-700 dark:text-pitch-500' : 'dark:text-zinc-300'}`}>
-                        Equipo Claro
+                        {matchTeamAName}
                       </div>
                       <ul className="text-pitch-900/60 dark:text-zinc-400 leading-tight space-y-0.5 text-xs text-left inline-block">
                         {teamA.map((t) => (
@@ -230,7 +232,7 @@ export default async function GroupHistorialPage({
 
                     <div className="flex-1 text-center px-2 border-l border-pitch-100/50 dark:border-zinc-800">
                       <div className={`font-semibold text-sm mb-2 ${isWinnerB ? 'font-bold text-pitch-700 dark:text-pitch-500' : 'dark:text-zinc-300'}`}>
-                        Equipo Oscuro
+                        {matchTeamBName}
                       </div>
                       <ul className="text-pitch-900/60 dark:text-zinc-400 leading-tight space-y-0.5 text-xs text-left inline-block">
                         {teamB.map((t) => (

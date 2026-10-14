@@ -97,6 +97,15 @@ export async function adminGroupUpdateMatch(formData: FormData) {
     format,
   };
 
+  if (formData.has("teamAName")) {
+    const val = String(formData.get("teamAName") || "").trim();
+    updates.teamAName = val || null;
+  }
+  if (formData.has("teamBName")) {
+    const val = String(formData.get("teamBName") || "").trim();
+    updates.teamBName = val || null;
+  }
+
   if (dateRaw) {
     const { parseArtInputDateTime, signupWindow } = await import("@/lib/time");
     const matchDate = parseArtInputDateTime(dateRaw);
@@ -454,6 +463,13 @@ export async function adminGroupSaveResult(formData: FormData) {
   await db.update(matches).set({ status: "finished" }).where(eq(matches.id, match.id));
 
   if (!wasAlreadyFinished) {
+    const { groups } = await import("@/db/schema");
+    const groupRow = (
+      await db.select().from(groups).where(eq(groups.id, groupId)).limit(1)
+    )[0];
+    const teamAName = match.teamAName || groupRow?.teamAName || "Claro";
+    const teamBName = match.teamBName || groupRow?.teamBName || "Oscuro";
+
     await notifyMatchCompletionAndAchievements({
       matchId: match.id,
       scoreA,
@@ -461,6 +477,8 @@ export async function adminGroupSaveResult(formData: FormData) {
       notes,
       oldStandings,
       oldStats,
+      teamAName,
+      teamBName,
     });
   }
 
@@ -513,6 +531,8 @@ export async function adminGroupSaveSettings(formData: FormData) {
   const ptsWin = Number(formData.get("ptsWin") ?? 3);
   const ptsDraw = Number(formData.get("ptsDraw") ?? 2);
   const ptsLoss = Number(formData.get("ptsLoss") ?? 1);
+  const teamAName = String(formData.get("teamAName") || "Claro").trim();
+  const teamBName = String(formData.get("teamBName") || "Oscuro").trim();
 
   await db
     .update(groups)
@@ -525,6 +545,8 @@ export async function adminGroupSaveSettings(formData: FormData) {
       ptsWin,
       ptsDraw,
       ptsLoss,
+      teamAName,
+      teamBName,
     })
     .where(eq(groups.id, groupId));
 
