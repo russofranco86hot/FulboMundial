@@ -17,24 +17,50 @@ import {
 import { getMatchPaymentConfig, getMatchPlayerPayments } from "@/lib/payments";
 import { TeamEditor, type TeamRow } from "@/components/team-editor";
 import { WhatsAppShare } from "@/components/whatsapp-share";
-import { MessageCircle, Shuffle, Users, Wallet, CheckCircle2, Clock, DollarSign, Edit3, Trash2 } from "lucide-react";
+import { MessageCircle, Shuffle, Users, Wallet, CheckCircle2, Clock, DollarSign, Edit3, Trash2, Trophy, ArrowRight } from "lucide-react";
+import { db, matches } from "@/db";
+import { desc, eq } from "drizzle-orm";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function GroupAdminPartido({
   params,
+  searchParams,
 }: {
   params: Promise<{ groupSlug: string }>;
+  searchParams: Promise<{ matchId?: string; saved?: string; opened?: string }>;
 }) {
   const { groupSlug } = await params;
+  const { matchId: matchIdParam, saved, opened } = await searchParams;
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();
 
-  const match = await getCurrentMatch(group.id);
+  // Todos los partidos del grupo para permitir ver/editar cualquier fecha
+  const allGroupMatches = await db
+    .select({
+      id: matches.id,
+      matchDate: matches.matchDate,
+      status: matches.status,
+      format: matches.format,
+      capacity: matches.capacity,
+    })
+    .from(matches)
+    .where(eq(matches.groupId, group.id))
+    .orderBy(desc(matches.matchDate))
+    .limit(20);
+
+  let match = null;
+  if (matchIdParam) {
+    match = (await db.select().from(matches).where(eq(matches.id, Number(matchIdParam))).limit(1))[0] ?? null;
+  }
+  if (!match) {
+    match = await getCurrentMatch(group.id);
+  }
 
   if (!match) {
-    const nextDate = nextGroupMatchDate(group.defaultDayOfWeek ?? 3, group.defaultTime ?? "21:00");
+    const nextDate = nextGroupMatchDate(group.defaultDayOfWeek, group.defaultTime ?? "21:00");
     const defaultDateStr = formatArt(nextDate, "yyyy-MM-dd'T'HH:mm");
 
     return (
@@ -133,17 +159,76 @@ export default async function GroupAdminPartido({
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {saved === "1" && (
+        <div className="rounded-2xl bg-green-500/15 p-4 text-sm font-semibold text-green-800 dark:text-green-300 border border-green-500/30 flex items-center gap-3 shadow-glow-green">
+          <CheckCircle2 className="text-green-600 dark:text-green-400 shrink-0" size={24} />
+          <span>¡Cambios del partido guardados correctamente! Fecha, horario y cupo actualizados.</span>
+        </div>
+      )}
+      {opened === "1" && (
+        <div className="rounded-2xl bg-green-500/15 p-4 text-sm font-semibold text-green-800 dark:text-green-300 border border-green-500/30 flex items-center gap-3 shadow-glow-green">
+          <CheckCircle2 className="text-green-600 dark:text-green-400 shrink-0" size={24} />
+          <span>¡Nuevo partido abierto con éxito! La lista de inscripción ya está disponible.</span>
+        </div>
+      )}
+
+      {/* Selector de partidos del grupo */}
+      {allGroupMatches.length > 0 && (
+        <div className="card space-y-2 py-3 bg-zinc-50/80 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-pitch-900/70 dark:text-zinc-300 flex items-center gap-1.5">
+              📅 Administrar partido:
+            </span>
+            <Link
+              href={`/grupos/${groupSlug}/admin/partido`}
+              className="text-[11px] text-pitch-600 dark:text-pitch-400 font-semibold hover:underline"
+            >
+              Ir al partido actual
+            </Link>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {allGroupMatches.map((m) => {
+              const isSelected = m.id === match?.id;
+              return (
+                <Link
+                  key={m.id}
+                  href={`/grupos/${groupSlug}/admin/partido?matchId=${m.id}`}
+                  className={`chip whitespace-nowrap text-xs py-1.5 px-3 rounded-xl font-bold transition-all border ${
+                    isSelected
+                      ? "bg-pitch-600 text-white border-pitch-700 shadow-sm"
+                      : "bg-white text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-pitch-400"
+                  }`}
+                >
+                  {formatArt(m.matchDate, "dd/MM")} ({m.status === "finished" ? "Finalizado" : m.status === "closed" ? "Cerrado" : "Abierto"})
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {match.status === "finished" && (
         <div className="card space-y-3 bg-amber-500/10 border border-amber-500/20 shadow-none">
-          <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-            ⚠️ El partido del {formatArt(match.matchDate, "dd/MM")} ya se encuentra finalizado.
-          </p>
-          <form action={adminOpenGroupMatch} className="space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+              ⚠️ Este partido del {formatArt(match.matchDate, "dd/MM")} ya se encuentra finalizado.
+            </p>
+            <Link
+              href={`/grupos/${groupSlug}/admin/resultado?matchId=${match.id}`}
+              className="btn-primary py-1.5 px-3 text-xs font-bold flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white border-none shadow-sm"
+            >
+              <Trophy size={14} /> Editar resultado / crónica <ArrowRight size={14} />
+            </Link>
+          </div>
+
+          <form action={adminOpenGroupMatch} className="space-y-3 pt-2 border-t border-amber-500/20">
             <input type="hidden" name="groupId" value={group.id} />
             <input type="hidden" name="groupSlug" value={group.slug} />
             <div className="grid grid-cols-2 gap-2 text-left">
               <div>
-                <label className="block text-xs font-semibold mb-1">Fecha y hora sugerida</label>
+                <label className="block text-xs font-semibold mb-1 text-amber-900 dark:text-amber-200">
+                  Fecha y hora para el próximo partido
+                </label>
                 <input
                   type="datetime-local"
                   name="matchDate"
@@ -153,7 +238,9 @@ export default async function GroupAdminPartido({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold mb-1">Formato</label>
+                <label className="block text-xs font-semibold mb-1 text-amber-900 dark:text-amber-200">
+                  Formato
+                </label>
                 <select name="format" className="input w-full" defaultValue={group.format}>
                   <option value="F5">F5</option>
                   <option value="F6">F6</option>
@@ -177,7 +264,7 @@ export default async function GroupAdminPartido({
         </p>
         <div className="flex gap-2 mt-3 text-sm flex-wrap">
           <span className="bg-white/20 px-3 py-1 rounded-full font-medium shadow-sm backdrop-blur-sm">
-            Estado: {match.status}
+            Estado: {match.status === "finished" ? "Finalizado" : match.status === "closed" ? "Cerrado" : "Abierto"}
           </span>
           <span className="bg-white/20 px-3 py-1 rounded-full font-medium shadow-sm backdrop-blur-sm">
             {match.format} ({match.capacity} cupo)
@@ -189,7 +276,7 @@ export default async function GroupAdminPartido({
       </div>
 
       {/* Modificar fecha / hora / cupos de este partido */}
-      <details className="card text-xs">
+      <details className="card text-xs" open={true}>
         <summary className="font-bold cursor-pointer text-pitch-800 dark:text-zinc-200 flex items-center gap-1.5">
           <Edit3 size={15} className="text-pitch-600" /> Modificar fecha, horario o cupo de este partido
         </summary>
@@ -199,7 +286,7 @@ export default async function GroupAdminPartido({
           <input type="hidden" name="matchId" value={match.id} />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div>
-              <label className="block font-semibold mb-1">Fecha y hora</label>
+              <label className="block font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Fecha y hora (ART)</label>
               <input
                 type="datetime-local"
                 name="matchDate"
@@ -209,7 +296,7 @@ export default async function GroupAdminPartido({
               />
             </div>
             <div>
-              <label className="block font-semibold mb-1">Formato</label>
+              <label className="block font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Formato</label>
               <select name="format" defaultValue={match.format} className="input w-full">
                 <option value="F5">F5</option>
                 <option value="F6">F6</option>
@@ -219,7 +306,7 @@ export default async function GroupAdminPartido({
               </select>
             </div>
             <div>
-              <label className="block font-semibold mb-1">Capacidad</label>
+              <label className="block font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Capacidad</label>
               <input
                 type="number"
                 name="capacity"

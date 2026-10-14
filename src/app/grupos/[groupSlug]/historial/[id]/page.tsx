@@ -1,12 +1,12 @@
 import { getMatchDetails, getMatchNotes, getMatchVotes } from "@/lib/queries";
 import { getMatchGoals } from "@/lib/goals";
-import { getCurrentPlayer } from "@/lib/session";
+import { getCurrentPlayer, isGroupAdmin } from "@/lib/session";
 import { getGroupBySlug } from "@/lib/groups";
 import { formatArt } from "@/lib/time";
 import { notFound } from "next/navigation";
 import { MatchDetailClient } from "./client-page";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Edit3 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -38,10 +38,11 @@ export default async function GroupMatchDetailPage({
   const isWinnerA = hasResult && scoreA > scoreB;
   const isWinnerB = hasResult && scoreB > scoreA;
   const isDraw = hasResult && scoreA === scoreB;
+  const isAdmin = await isGroupAdmin(group.id);
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <Link
           href={`/grupos/${resolvedParams.groupSlug}/historial`}
           className="btn-ghost p-2.5 rounded-full hover:bg-pitch-100/50 transition-colors group"
@@ -51,9 +52,17 @@ export default async function GroupMatchDetailPage({
         <div>
           <h1 className="text-2xl font-extrabold text-pitch-700 dark:text-zinc-100">Detalles del Partido</h1>
           <p className="text-sm text-pitch-900/60 dark:text-zinc-400 mt-1 capitalize">
-            {formatArt(match.matchDate, "EEEE dd/MM/yyyy")}
+            {formatArt(match.matchDate, "EEEE dd/MM/yyyy HH:mm")}
           </p>
         </div>
+        {isAdmin && (
+          <Link
+            href={`/grupos/${resolvedParams.groupSlug}/admin/resultado?matchId=${matchId}`}
+            className="btn-primary ml-auto text-xs py-2 px-3.5 font-bold shadow-glow-green flex items-center gap-1.5"
+          >
+            <Edit3 size={14} /> Editar resultado / equipos
+          </Link>
+        )}
       </div>
 
       {/* Resultado y Equipos */}

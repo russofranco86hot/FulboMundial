@@ -43,7 +43,8 @@ export async function adminOpenGroupMatch(formData: FormData) {
   const dateRaw = String(formData.get("matchDate") || "").trim();
   let matchDate: Date;
   if (dateRaw) {
-    matchDate = new Date(dateRaw);
+    const { parseArtInputDateTime } = await import("@/lib/time");
+    matchDate = parseArtInputDateTime(dateRaw);
   } else {
     const { groups } = await import("@/db/schema");
     const { nextGroupMatchDate } = await import("@/lib/time");
@@ -67,7 +68,7 @@ export async function adminOpenGroupMatch(formData: FormData) {
   const capacity = Number(formData.get("capacity")) || 10;
   const format = String(formData.get("format") || "F5");
 
-  await openNextMatch({
+  const newMatch = await openNextMatch({
     groupId,
     matchDate,
     capacity,
@@ -76,6 +77,7 @@ export async function adminOpenGroupMatch(formData: FormData) {
   });
 
   refreshGroup(groupSlug);
+  redirect(`/grupos/${groupSlug}/admin/partido?matchId=${newMatch.id}&opened=1`);
 }
 
 export async function adminGroupUpdateMatch(formData: FormData) {
@@ -96,8 +98,8 @@ export async function adminGroupUpdateMatch(formData: FormData) {
   };
 
   if (dateRaw) {
-    const matchDate = new Date(dateRaw);
-    const { signupWindow } = await import("@/lib/time");
+    const { parseArtInputDateTime, signupWindow } = await import("@/lib/time");
+    const matchDate = parseArtInputDateTime(dateRaw);
     const { opensAt, closesAt } = signupWindow(matchDate);
     updates.matchDate = matchDate;
     updates.signupOpensAt = opensAt;
@@ -106,6 +108,7 @@ export async function adminGroupUpdateMatch(formData: FormData) {
 
   await db.update(matches).set(updates).where(eq(matches.id, matchId));
   refreshGroup(groupSlug);
+  redirect(`/grupos/${groupSlug}/admin/partido?matchId=${matchId}&saved=1`);
 }
 
 export async function adminCloseGroupMatch(formData: FormData) {

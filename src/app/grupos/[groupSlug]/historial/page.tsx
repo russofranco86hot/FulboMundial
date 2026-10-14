@@ -2,6 +2,7 @@ import { getGroupBySlug } from "@/lib/groups";
 import { getStandings, getRecentMatches } from "@/lib/queries";
 import { getGroupTopScorers } from "@/lib/goals";
 import { formatArt } from "@/lib/time";
+import { isGroupAdmin } from "@/lib/session";
 import { Trophy } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -18,8 +19,9 @@ export default async function GroupHistorialPage({
   if (!group) return notFound();
 
   const rows = await getStandings(group.id);
-  const recentMatches = await getRecentMatches(group.id, 5);
+  const recentMatches = await getRecentMatches(group.id, 10);
   const topScorers = await getGroupTopScorers(group.id);
+  const isAdmin = await isGroupAdmin(group.id);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -249,13 +251,21 @@ export default async function GroupHistorialPage({
                       {m.notes}
                     </div>
                   )}
-                  <div className="pt-2 border-t border-pitch-100/50 dark:border-zinc-800 mt-3">
+                  <div className="pt-2 border-t border-pitch-100/50 dark:border-zinc-800 mt-3 flex items-center justify-between gap-2">
                     <Link
                       href={`/grupos/${groupSlug}/historial/${m.id}`}
-                      className="block text-center text-sm font-bold text-pitch-600 dark:text-pitch-400 hover:text-pitch-700 w-full py-1"
+                      className="text-sm font-bold text-pitch-600 dark:text-pitch-400 hover:text-pitch-700 py-1"
                     >
                       Ver Detalles y Votar →
                     </Link>
+                    {isAdmin && (
+                      <Link
+                        href={`/grupos/${groupSlug}/admin/resultado?matchId=${m.id}`}
+                        className="text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 py-1 px-2.5 rounded-lg border border-amber-200 dark:border-amber-900/50 flex items-center gap-1"
+                      >
+                        ✏️ Editar resultado
+                      </Link>
+                    )}
                   </div>
                 </div>
               );

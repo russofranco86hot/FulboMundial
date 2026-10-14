@@ -19,6 +19,21 @@ export function artWallTimeToUtc(
   return fromZonedTime(`${year}-${mm}-${dd} ${hh}:${mi}:00`, ART_TZ);
 }
 
+/** Parsea una fecha ingresada desde un input datetime-local asegurando la zona horaria de Argentina. */
+export function parseArtInputDateTime(val: string): Date {
+  if (!val) return new Date();
+  const clean = val.trim().replace("Z", "");
+  const parts = clean.split("T");
+  if (parts.length === 2) {
+    const [y, m, d] = parts[0].split("-").map(Number);
+    const [hh, mm] = parts[1].split(":").map(Number);
+    if (y && m && d) {
+      return artWallTimeToUtc(y, m, d, hh || 0, mm || 0);
+    }
+  }
+  return new Date(val);
+}
+
 /** Devuelve los componentes de fecha (en ART) de un instante. */
 function artParts(date: Date) {
   const z = toZonedTime(date, ART_TZ);

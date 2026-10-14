@@ -6,7 +6,7 @@ import { desc, eq } from "drizzle-orm";
 import { formatArt } from "@/lib/time";
 import { adminGroupSaveResult } from "../actions";
 import { TeamEditor, type TeamRow } from "@/components/team-editor";
-import { CheckCircle, Info, Calendar, ArrowRightLeft } from "lucide-react";
+import { CheckCircle, Info, Calendar, ArrowRightLeft, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -89,80 +89,103 @@ export default async function GroupAdminResultado({
         </div>
       )}
 
-      {/* Selector de Partido a Editar */}
-      {allGroupMatches.length > 1 && (
-        <div className="card bg-zinc-50/80 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 py-3">
-          <form method="GET" className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <label className="text-xs font-bold text-pitch-900/70 dark:text-zinc-300 whitespace-nowrap flex items-center gap-1.5">
-              <Calendar size={14} className="text-pitch-600" />
-              Editar partido:
-            </label>
-            <select
-              name="matchId"
-              defaultValue={match.id}
-              className="input flex-1 py-1.5 px-3 text-xs font-semibold"
-            >
-              {allGroupMatches.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {formatArt(m.matchDate, "EEEE dd/MM/yyyy HH:mm")} — {m.status === "finished" ? "Finalizado" : m.status === "closed" ? "Lista Cerrada" : "Abierto"}
-                </option>
-              ))}
-            </select>
-            <button type="submit" className="btn-ghost py-1.5 px-4 text-xs font-bold whitespace-nowrap bg-white dark:bg-zinc-700 border-zinc-300">
-              Cargar partido
-            </button>
-          </form>
+      {/* Selector de Partido a Editar (Pills de 1 clic) */}
+      {allGroupMatches.length > 0 && (
+        <div className="card space-y-2 py-3 bg-zinc-50/80 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-pitch-900/70 dark:text-zinc-300 flex items-center gap-1.5">
+              🏆 Seleccionar partido para cargar o modificar resultado:
+            </span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {allGroupMatches.map((m) => {
+              const isSelected = m.id === match.id;
+              return (
+                <Link
+                  key={m.id}
+                  href={`/grupos/${groupSlug}/admin/resultado?matchId=${m.id}`}
+                  className={`chip whitespace-nowrap text-xs py-1.5 px-3 rounded-xl font-bold transition-all border ${
+                    isSelected
+                      ? "bg-pitch-600 text-white border-pitch-700 shadow-sm"
+                      : "bg-white text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-pitch-400"
+                  }`}
+                >
+                  {formatArt(m.matchDate, "dd/MM")} ({m.status === "finished" ? "Finalizado" : m.status === "closed" ? "Cerrado" : "Abierto"})
+                </Link>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* Header del Partido */}
       <div className="card">
         <div className="flex items-start justify-between gap-3 mb-2">
-          <p className="capitalize font-bold text-lg text-pitch-800 dark:text-pitch-100">
-            {formatArt(match.matchDate, "EEEE dd/MM/yyyy HH:mm")}
-          </p>
-          <span
-            className={`chip font-semibold shrink-0 text-xs ${
-              isFinished
-                ? "bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-200"
-                : match.status === "closed"
-                ? "bg-amber-100 text-amber-800"
-                : "bg-pitch-100 text-pitch-700"
-            }`}
-          >
-            {isFinished ? "Finalizado" : match.status === "closed" ? "Lista Cerrada" : "Abierto"}
-          </span>
+          <div>
+            <p className="capitalize font-bold text-lg text-pitch-800 dark:text-pitch-100">
+              {formatArt(match.matchDate, "EEEE dd/MM/yyyy HH:mm")}
+            </p>
+            <p className="text-xs text-pitch-900/50 dark:text-zinc-400 mt-0.5">
+              Partido #{match.id} · Formato {match.format}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className={`chip font-semibold shrink-0 text-xs ${
+                isFinished
+                  ? "bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-200"
+                  : match.status === "closed"
+                  ? "bg-amber-100 text-amber-800"
+                  : "bg-pitch-100 text-pitch-700"
+              }`}
+            >
+              {isFinished ? "Finalizado" : match.status === "closed" ? "Lista Cerrada" : "Abierto"}
+            </span>
+            <Link
+              href={`/grupos/${groupSlug}/admin/partido?matchId=${match.id}`}
+              className="chip bg-pitch-50 text-pitch-700 dark:bg-zinc-800 dark:text-zinc-300 text-xs font-semibold hover:border-pitch-400 flex items-center gap-1"
+              title="Ver en pestaña Partido"
+            >
+              <ExternalLink size={12} /> Ver en Partido
+            </Link>
+          </div>
         </div>
         <p className="text-sm text-pitch-900/60 dark:text-zinc-400 flex items-start gap-2 bg-pitch-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-pitch-100 dark:border-zinc-700">
           <Info size={16} className="text-pitch-500 shrink-0 mt-0.5" />
           {isFinished
-            ? "Partido finalizado. Podés modificar los equipos, resultado, goles o notas si ocurrió algún error y la tabla histórica se actualizará en tiempo real."
-            : "Cargá el resultado. El sistema actualiza G/E/P de cada jugador en la tabla histórica del grupo."}
+            ? "Partido finalizado. Podés modificar los equipos arrastrando los jugadores abajo, cambiar el resultado, goles o notas y la tabla histórica se recalculará automáticamente."
+            : "Cargá el resultado de este partido. El sistema computa los puntos de cada jugador en la tabla histórica."}
         </p>
       </div>
 
       {teamRows.length === 0 && (
-        <div className="card text-sm text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 flex items-center gap-2">
-          <span className="text-xl">⚠️</span> No hay equipos cargados. Armalos abajo o en “Partido” para que el resultado compute en el historial.
+        <div className="card text-sm text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">⚠️</span> No hay equipos cargados para este partido.
+          </div>
+          <Link
+            href={`/grupos/${groupSlug}/admin/partido?matchId=${match.id}`}
+            className="btn-primary py-1 px-3 text-xs font-bold whitespace-nowrap"
+          >
+            Armar equipos en Partido →
+          </Link>
         </div>
       )}
 
-      {/* ─── Editor de Equipos en Resultado ─── */}
+      {/* ─── Editor de Equipos en Resultado (SIEMPRE VISIBLE) ─── */}
       {teamRows.length > 0 && (
-        <details className="card space-y-3" open={false}>
-          <summary className="cursor-pointer font-bold text-pitch-800 dark:text-pitch-100 flex items-center justify-between">
-            <span className="flex items-center gap-2">
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-1">
+            <span className="font-bold text-pitch-800 dark:text-pitch-100 flex items-center gap-2 text-sm">
               <ArrowRightLeft size={16} className="text-pitch-600" />
-              Intercambiar jugadores entre equipos ({teamRows.length} jugadores)
+              Alineación de Equipos ({teamRows.length} jugadores)
             </span>
-            <span className="text-xs font-normal text-pitch-900/50 dark:text-zinc-400">
-              (Arrastrá para corregir alineación)
+            <span className="text-xs text-pitch-900/50 dark:text-zinc-400">
+              Arrastrá cualquier jugador para intercambiar de equipo
             </span>
-          </summary>
-          <div className="pt-2">
-            <TeamEditor key={teamsSig} rows={editorRows} groupSlug={group.slug} />
           </div>
-        </details>
+          <TeamEditor key={teamsSig} rows={editorRows} groupSlug={group.slug} />
+        </div>
       )}
 
       {/* ─── Formulario de Resultado ─── */}
@@ -321,16 +344,14 @@ export default async function GroupAdminResultado({
         </button>
       </form>
 
-      {isFinished && (
-        <div className="text-center pt-2">
-          <Link
-            href={`/grupos/${groupSlug}/admin/partido`}
-            className="inline-flex items-center gap-1 text-sm font-bold text-pitch-600 dark:text-pitch-400 hover:text-pitch-700 hover:underline bg-white dark:bg-zinc-800 px-4 py-2 rounded-full shadow-sm border border-pitch-100 dark:border-zinc-700 transition-all"
-          >
-            ← Volver a "Partido" para el próximo
-          </Link>
-        </div>
-      )}
+      <div className="text-center pt-2">
+        <Link
+          href={`/grupos/${groupSlug}/admin/partido?matchId=${match.id}`}
+          className="inline-flex items-center gap-1 text-sm font-bold text-pitch-600 dark:text-pitch-400 hover:text-pitch-700 hover:underline bg-white dark:bg-zinc-800 px-4 py-2 rounded-full shadow-sm border border-pitch-100 dark:border-zinc-700 transition-all"
+        >
+          ← Ir a "Partido" para este u otro encuentro
+        </Link>
+      </div>
     </div>
   );
 }
