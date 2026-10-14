@@ -69,6 +69,15 @@ export async function ensureDbUpgrades() {
       console.warn("Migration notice (match_goals):", e);
     }
 
+    // 5. Configuración de puntos en grupos
+    try {
+      await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS pts_win INTEGER NOT NULL DEFAULT 3;`);
+      await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS pts_draw INTEGER NOT NULL DEFAULT 2;`);
+      await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS pts_loss INTEGER NOT NULL DEFAULT 1;`);
+    } catch (e) {
+      console.warn("Migration notice (groups points columns):", e);
+    }
+
     migrationsRun = true;
   } catch (err) {
     console.error("Error running DB upgrades:", err);

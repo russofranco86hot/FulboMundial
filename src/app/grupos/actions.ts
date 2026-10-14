@@ -177,3 +177,34 @@ export async function actionPlayerNotifyTransfer(formData: FormData) {
     revalidatePath(`/grupos/${groupSlug}`);
   }
 }
+
+// ─── Mover o quitar jugador de equipo ─────────────────────────────────────
+export async function actionMoveTeamInGroup(rowId: number, team: "A" | "B", groupSlug?: string) {
+  if (!rowId) return;
+  const { teams } = await import("@/db/schema");
+  await db.update(teams).set({ team }).where(eq(teams.id, rowId));
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}`);
+    revalidatePath(`/grupos/${groupSlug}/equipos`);
+    revalidatePath(`/grupos/${groupSlug}/admin/partido`);
+    revalidatePath(`/grupos/${groupSlug}/admin/resultado`);
+  } else {
+    revalidatePath("/admin");
+    revalidatePath("/equipos");
+  }
+}
+
+export async function actionRemoveTeamRowInGroup(rowId: number, groupSlug?: string) {
+  if (!rowId) return;
+  const { teams } = await import("@/db/schema");
+  await db.delete(teams).where(eq(teams.id, rowId));
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}`);
+    revalidatePath(`/grupos/${groupSlug}/equipos`);
+    revalidatePath(`/grupos/${groupSlug}/admin/partido`);
+    revalidatePath(`/grupos/${groupSlug}/admin/resultado`);
+  } else {
+    revalidatePath("/admin");
+    revalidatePath("/equipos");
+  }
+}

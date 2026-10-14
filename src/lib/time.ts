@@ -54,20 +54,45 @@ export function nextMatchDate(now: Date = new Date()): Date {
 
 /**
  * Calcula la fecha y hora del próximo partido según el día de la semana y hora habitual del grupo.
+ * Si se pasa `lastMatchDate`, programa la próxima edición (7 días después) manteniendo el día y hora.
  * dayOfWeek: 0 (domingo) .. 6 (sábado).
  * timeStr: "HH:mm" (ej: "21:00", "22:00").
  */
 export function nextGroupMatchDate(
-  dayOfWeek = 3,
+  dayOfWeek?: number | null,
   timeStr = "21:00",
-  now: Date = new Date()
+  now: Date = new Date(),
+  lastMatchDate?: Date | null
 ): Date {
   const parts = (timeStr || "21:00").split(":");
-  const targetHour = parseInt(parts[0] || "21", 10);
-  const targetMinute = parseInt(parts[1] || "0", 10);
+  let targetHour = parseInt(parts[0] || "21", 10);
+  let targetMinute = parseInt(parts[1] || "0", 10);
+
+  let targetDay = dayOfWeek;
+  if (targetDay === null || targetDay === undefined) {
+    if (lastMatchDate) {
+      const lp = artParts(lastMatchDate);
+      targetDay = lp.weekday;
+      targetHour = lp.hour;
+      targetMinute = lp.minute;
+    } else {
+      targetDay = 3; // Miércoles por defecto
+    }
+  }
+
+  // Si hay un partido de referencia, calcular 7 días después de ese partido
+  if (lastMatchDate) {
+    const nextWeekSameTime = new Date(lastMatchDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const np = artParts(nextWeekSameTime);
+    let daysUntil = (targetDay - np.weekday + 7) % 7;
+    const base = artWallTimeToUtc(np.year, np.month, np.day, targetHour, targetMinute);
+    const target = new Date(base.getTime() + daysUntil * 24 * 60 * 60 * 1000);
+    const tp = artParts(target);
+    return artWallTimeToUtc(tp.year, tp.month, tp.day, targetHour, targetMinute);
+  }
 
   const p = artParts(now);
-  let daysUntil = (dayOfWeek - p.weekday + 7) % 7;
+  let daysUntil = (targetDay - p.weekday + 7) % 7;
   // Si hoy es el mismo día pero ya pasó la hora del partido, programar para la próxima semana
   if (
     daysUntil === 0 &&

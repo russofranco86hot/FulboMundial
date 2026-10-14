@@ -63,6 +63,9 @@ export const groups = pgTable(
     defaultDayOfWeek: integer("default_day_of_week"), // 0=Dom..6=Sáb, null=sin recurrencia fija
     defaultTime: text("default_time"), // "22:00"
     inviteCode: text("invite_code").notNull(), // código corto 6 chars
+    ptsWin: integer("pts_win").notNull().default(3),
+    ptsDraw: integer("pts_draw").notNull().default(2),
+    ptsLoss: integer("pts_loss").notNull().default(1),
     createdBy: integer("created_by").references(() => players.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

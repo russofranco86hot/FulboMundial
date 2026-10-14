@@ -36,6 +36,7 @@ export default async function GroupAdminLayout({
     },
     { href: `/grupos/${groupSlug}/admin/resultado`, label: "Resultado" },
     { href: `/grupos/${groupSlug}/admin/push`, label: "Push" },
+    { href: `/grupos/${groupSlug}/admin/configuracion`, label: "⚙️ Config" },
   ];
 
   return (

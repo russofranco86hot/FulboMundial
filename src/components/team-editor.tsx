@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { adminMoveTeam, adminRemoveRow } from "@/app/admin/actions";
 import { Trash2 } from "lucide-react";
+import { actionMoveTeamInGroup, actionRemoveTeamRowInGroup } from "@/app/grupos/actions";
 
 export type TeamRow = {
   id: number;
@@ -17,7 +17,13 @@ export type TeamRow = {
  * Editor de equipos con drag & drop (táctil y mouse). Arrastrá un jugador a la
  * otra columna para cambiarlo de equipo. Sin librerías: pointer events.
  */
-export function TeamEditor({ rows: initial }: { rows: TeamRow[] }) {
+export function TeamEditor({
+  rows: initial,
+  groupSlug,
+}: {
+  rows: TeamRow[];
+  groupSlug?: string;
+}) {
   const [rows, setRows] = useState<TeamRow[]>(initial);
   const [dragId, setDragId] = useState<number | null>(null);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -58,8 +64,10 @@ export function TeamEditor({ rows: initial }: { rows: TeamRow[] }) {
     const target = zoneAt(e.clientX, e.clientY);
     const row = rows.find((r) => r.id === dragId);
     if (target && row && row.team !== target) {
+      // Optimistic UI update
       setRows((rs) => rs.map((r) => (r.id === dragId ? { ...r, team: target } : r)));
-      void adminMoveTeam(dragId, target);
+      // Persist to DB using direct server action
+      void actionMoveTeamInGroup(dragId, target, groupSlug);
     }
     setDragId(null);
     setHover(null);
@@ -67,7 +75,7 @@ export function TeamEditor({ rows: initial }: { rows: TeamRow[] }) {
 
   function remove(id: number) {
     setRows((rs) => rs.filter((r) => r.id !== id));
-    void adminRemoveRow(id);
+    void actionRemoveTeamRowInGroup(id, groupSlug);
   }
 
   const dragRow = rows.find((r) => r.id === dragId) || null;

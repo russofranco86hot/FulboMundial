@@ -11,11 +11,13 @@ import {
   adminGroupPushTeams,
   adminGroupSavePaymentConfig,
   adminGroupTogglePlayerPaid,
+  adminGroupUpdateMatch,
+  adminGroupClearTeams,
 } from "../actions";
 import { getMatchPaymentConfig, getMatchPlayerPayments } from "@/lib/payments";
 import { TeamEditor, type TeamRow } from "@/components/team-editor";
 import { WhatsAppShare } from "@/components/whatsapp-share";
-import { MessageCircle, Shuffle, Users, Wallet, CheckCircle2, Clock, DollarSign } from "lucide-react";
+import { MessageCircle, Shuffle, Users, Wallet, CheckCircle2, Clock, DollarSign, Edit3, Trash2 } from "lucide-react";
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -121,6 +123,14 @@ export default async function GroupAdminPartido({
   const playerPaymentsList = await getMatchPlayerPayments(match.id);
   const paymentMap = new Map(playerPaymentsList.map((p) => [p.playerId, p]));
 
+  const nextDateAfterFinished = nextGroupMatchDate(
+    group.defaultDayOfWeek,
+    group.defaultTime ?? "21:00",
+    new Date(),
+    match.matchDate
+  );
+  const nextDefaultDateStr = formatArt(nextDateAfterFinished, "yyyy-MM-dd'T'HH:mm");
+
   return (
     <div className="space-y-5 animate-fade-in">
       {match.status === "finished" && (
@@ -133,8 +143,14 @@ export default async function GroupAdminPartido({
             <input type="hidden" name="groupSlug" value={group.slug} />
             <div className="grid grid-cols-2 gap-2 text-left">
               <div>
-                <label className="block text-xs font-semibold mb-1">Fecha y hora</label>
-                <input type="datetime-local" name="matchDate" className="input w-full" required />
+                <label className="block text-xs font-semibold mb-1">Fecha y hora sugerida</label>
+                <input
+                  type="datetime-local"
+                  name="matchDate"
+                  defaultValue={nextDefaultDateStr}
+                  className="input w-full"
+                  required
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold mb-1">Formato</label>
@@ -148,7 +164,7 @@ export default async function GroupAdminPartido({
               </div>
             </div>
             <button className="btn-primary w-full text-sm">
-              ➕ Abrir inscripción para el próximo partido
+              ➕ Abrir inscripción para el próximo partido ({formatArt(nextDateAfterFinished, "dd/MM HH:mm")})
             </button>
           </form>
         </div>
@@ -171,6 +187,55 @@ export default async function GroupAdminPartido({
           </span>
         </div>
       </div>
+
+      {/* Modificar fecha / hora / cupos de este partido */}
+      <details className="card text-xs">
+        <summary className="font-bold cursor-pointer text-pitch-800 dark:text-zinc-200 flex items-center gap-1.5">
+          <Edit3 size={15} className="text-pitch-600" /> Modificar fecha, horario o cupo de este partido
+        </summary>
+        <form action={adminGroupUpdateMatch} className="mt-3 space-y-3">
+          <input type="hidden" name="groupId" value={group.id} />
+          <input type="hidden" name="groupSlug" value={group.slug} />
+          <input type="hidden" name="matchId" value={match.id} />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <label className="block font-semibold mb-1">Fecha y hora</label>
+              <input
+                type="datetime-local"
+                name="matchDate"
+                defaultValue={formatArt(match.matchDate, "yyyy-MM-dd'T'HH:mm")}
+                className="input w-full"
+                required
+              />
+            </div>
+            <div>
+              <label className="block font-semibold mb-1">Formato</label>
+              <select name="format" defaultValue={match.format} className="input w-full">
+                <option value="F5">F5</option>
+                <option value="F6">F6</option>
+                <option value="F7">F7</option>
+                <option value="F8">F8</option>
+                <option value="F11">F11</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold mb-1">Capacidad</label>
+              <input
+                type="number"
+                name="capacity"
+                defaultValue={match.capacity}
+                min={4}
+                max={30}
+                className="input w-full"
+                required
+              />
+            </div>
+          </div>
+          <button type="submit" className="btn-primary py-2 px-4 text-xs font-bold shadow-sm">
+            Guardar cambios del partido
+          </button>
+        </form>
+      </details>
 
       {/* Lista */}
       <div className="card">
@@ -277,18 +342,34 @@ export default async function GroupAdminPartido({
 
       {/* Equipos */}
       <div className="card space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="font-bold text-pitch-800 dark:text-pitch-100">Equipos</h3>
-          <form action={adminGroupGenerateTeams}>
-            <input type="hidden" name="groupId" value={group.id} />
-            <input type="hidden" name="groupSlug" value={group.slug} />
-            <button className="btn-primary px-4 py-2 text-sm flex items-center gap-2 shadow-glow-green">
-              <Shuffle size={16} /> Generar equipos
-            </button>
-          </form>
+          <div className="flex items-center gap-2">
+            {editorRows.length > 0 && (
+              <form action={adminGroupClearTeams}>
+                <input type="hidden" name="groupId" value={group.id} />
+                <input type="hidden" name="groupSlug" value={group.slug} />
+                <input type="hidden" name="matchId" value={match.id} />
+                <button
+                  type="submit"
+                  className="btn-ghost px-3 py-2 text-xs font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-900/40 flex items-center gap-1.5"
+                  title="Quitar todos los jugadores de los equipos"
+                >
+                  <Trash2 size={14} /> Limpiar equipos
+                </button>
+              </form>
+            )}
+            <form action={adminGroupGenerateTeams}>
+              <input type="hidden" name="groupId" value={group.id} />
+              <input type="hidden" name="groupSlug" value={group.slug} />
+              <button className="btn-primary px-4 py-2 text-sm flex items-center gap-2 shadow-glow-green">
+                <Shuffle size={16} /> Generar equipos
+              </button>
+            </form>
+          </div>
         </div>
 
-        <TeamEditor key={teamsSig} rows={editorRows} />
+        <TeamEditor key={teamsSig} rows={editorRows} groupSlug={group.slug} />
 
         <details className="rounded-2xl bg-zinc-50 dark:bg-zinc-800/30 border border-zinc-200 dark:border-zinc-700 p-4">
           <summary className="cursor-pointer text-sm font-bold text-zinc-700 dark:text-zinc-300">
@@ -313,6 +394,7 @@ export default async function GroupAdminPartido({
                     <form action={adminGroupAddPlayerToTeam}>
                       <input type="hidden" name="groupId" value={group.id} />
                       <input type="hidden" name="groupSlug" value={group.slug} />
+                      <input type="hidden" name="matchId" value={match.id} />
                       <input type="hidden" name="playerId" value={p.id} />
                       <input type="hidden" name="team" value="A" />
                       <button className="rounded-lg bg-pitch-50 hover:bg-pitch-100 dark:bg-pitch-900/20 dark:hover:bg-pitch-900/40 border border-pitch-200 dark:border-pitch-800 px-2.5 py-1.5 text-xs font-bold text-pitch-700 dark:text-pitch-400 transition-colors">
@@ -322,6 +404,7 @@ export default async function GroupAdminPartido({
                     <form action={adminGroupAddPlayerToTeam}>
                       <input type="hidden" name="groupId" value={group.id} />
                       <input type="hidden" name="groupSlug" value={group.slug} />
+                      <input type="hidden" name="matchId" value={match.id} />
                       <input type="hidden" name="playerId" value={p.id} />
                       <input type="hidden" name="team" value="B" />
                       <button className="rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-800 px-2.5 py-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 transition-colors">
@@ -337,6 +420,7 @@ export default async function GroupAdminPartido({
         <form action={adminGroupAddGuest} className="space-y-3 rounded-2xl bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-900/30 p-4">
           <input type="hidden" name="groupId" value={group.id} />
           <input type="hidden" name="groupSlug" value={group.slug} />
+          <input type="hidden" name="matchId" value={match.id} />
           <p className="text-sm font-bold text-amber-800 dark:text-amber-400">👤 Agregar invitado manual</p>
           <div className="flex gap-2">
             <input name="name" placeholder="Nombre del invitado" className="input flex-1 py-2" required />

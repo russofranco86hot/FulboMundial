@@ -22,7 +22,7 @@ export default async function GroupAdminHome({
   const playing = selection.filter((s) => s.status === "playing").length;
   const subs = selection.filter((s) => s.status === "substitute").length;
   const pendingRequests = await countPendingRequests(group.id);
-  const nextDate = nextGroupMatchDate(group.defaultDayOfWeek ?? 3, group.defaultTime ?? "21:00");
+  const nextDate = nextGroupMatchDate(group.defaultDayOfWeek, group.defaultTime ?? "21:00", new Date(), match?.matchDate);
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -95,15 +95,23 @@ export default async function GroupAdminHome({
       <div className="card space-y-3">
         <h3 className="font-bold text-pitch-800 dark:text-pitch-100 text-sm">Acciones rápidas</h3>
         
-        <form action={adminOpenGroupMatch}>
+        <form action={adminOpenGroupMatch} className="space-y-2">
           <input type="hidden" name="groupId" value={group.id} />
           <input type="hidden" name="groupSlug" value={group.slug} />
-          <input type="hidden" name="matchDate" value={nextDate.toISOString()} />
           <input type="hidden" name="capacity" value={group.defaultCapacity} />
           <input type="hidden" name="format" value={group.format} />
-          <button className="btn-primary w-full flex items-center justify-center gap-2">
-            <PlusCircle size={18} /> Abrir próximo partido ({formatArt(nextDate, "EEE dd/MM HH:mm")})
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="datetime-local"
+              name="matchDate"
+              defaultValue={formatArt(nextDate, "yyyy-MM-dd'T'HH:mm")}
+              className="input text-xs py-2 flex-1"
+              required
+            />
+            <button className="btn-primary py-2 px-4 text-xs font-bold whitespace-nowrap flex items-center justify-center gap-1.5 shadow-glow-green">
+              <PlusCircle size={16} /> Abrir próximo partido
+            </button>
+          </div>
         </form>
 
         <form action={adminCloseGroupMatch}>

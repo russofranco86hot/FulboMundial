@@ -121,9 +121,34 @@ export async function getStandings(groupId?: number): Promise<StandingRow[]> {
   let targetGroupId = groupId;
   if (!targetGroupId) {
     const { groups } = await import("@/db/schema");
-    const g = (await db.select({ id: groups.id }).from(groups).where(eq(groups.slug, "futbol-miercoles")).limit(1))[0]
-      || (await db.select({ id: groups.id }).from(groups).limit(1))[0];
+    const g =
+      (await db.select({ id: groups.id }).from(groups).where(eq(groups.slug, "futbol-miercoles")).limit(1))[0] ||
+      (await db.select({ id: groups.id }).from(groups).limit(1))[0];
     if (g) targetGroupId = g.id;
+  }
+
+  let ptsWin = 3;
+  let ptsDraw = 2;
+  let ptsLoss = 1;
+
+  if (targetGroupId) {
+    const { groups } = await import("@/db/schema");
+    const grp = (
+      await db
+        .select({
+          ptsWin: groups.ptsWin,
+          ptsDraw: groups.ptsDraw,
+          ptsLoss: groups.ptsLoss,
+        })
+        .from(groups)
+        .where(eq(groups.id, targetGroupId))
+        .limit(1)
+    )[0];
+    if (grp) {
+      ptsWin = grp.ptsWin ?? 3;
+      ptsDraw = grp.ptsDraw ?? 2;
+      ptsLoss = grp.ptsLoss ?? 1;
+    }
   }
 
   // 1. Obtener la tabla base (estadísticas raw) — solo miembros del grupo
@@ -275,7 +300,7 @@ export async function getStandings(groupId?: number): Promise<StandingRow[]> {
       if (matchups[Number(biggestRivalId)] === "W") badges.push("⚔️");
     }
 
-    const pts = (won * 3) + (drawn * 2) + (lost * 1);
+    const pts = (won * ptsWin) + (drawn * ptsDraw) + (lost * ptsLoss);
 
     return {
       playerId: pid,
@@ -316,17 +341,19 @@ export async function getMatchTeams(matchId: number) {
     .from(teams)
     .leftJoin(players, eq(players.id, teams.playerId))
     .where(eq(teams.matchId, matchId));
-  return rows.map((r) => ({
-    id: r.id,
-    team: r.team,
-    playerId: r.playerId,
-    name: r.name ?? r.guestName ?? "Invitado",
-    stars: Number(r.stars) || 0,
-    isGoalkeeper: !!r.isGoalkeeper,
-    isGuest: r.isGuest,
-    preferredPosition: r.preferredPosition ?? "MED",
-    preferredFoot: r.preferredFoot ?? "R",
-  }));
+  return rows
+    .filter((r) => (r.name && r.name.trim() !== "") || (r.guestName && r.guestName.trim() !== ""))
+    .map((r) => ({
+      id: r.id,
+      team: r.team,
+      playerId: r.playerId,
+      name: r.name ?? r.guestName ?? "Invitado",
+      stars: Number(r.stars) || 0,
+      isGoalkeeper: !!r.isGoalkeeper,
+      isGuest: r.isGuest,
+      preferredPosition: r.preferredPosition ?? "MED",
+      preferredFoot: r.preferredFoot ?? "R",
+    }));
 }
 
 /** Todos los jugadores miembros activos del grupo, ordenados por prioridad. */

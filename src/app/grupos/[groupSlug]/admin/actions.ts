@@ -29,6 +29,7 @@ function refreshGroup(groupSlug: string) {
   revalidatePath(`/grupos/${groupSlug}/admin/jugadores`);
   revalidatePath(`/grupos/${groupSlug}/admin/comentarios`);
   revalidatePath(`/grupos/${groupSlug}/admin/resultado`);
+  revalidatePath(`/grupos/${groupSlug}/admin/configuracion`);
   revalidatePath(`/grupos/${groupSlug}/admin/push`);
   revalidatePath(`/grupos`);
 }
@@ -47,7 +48,20 @@ export async function adminOpenGroupMatch(formData: FormData) {
     const { groups } = await import("@/db/schema");
     const { nextGroupMatchDate } = await import("@/lib/time");
     const grp = (await db.select().from(groups).where(eq(groups.id, groupId)).limit(1))[0];
-    matchDate = nextGroupMatchDate(grp?.defaultDayOfWeek ?? 3, grp?.defaultTime ?? "21:00");
+    const lastM = (
+      await db
+        .select({ matchDate: matches.matchDate })
+        .from(matches)
+        .where(eq(matches.groupId, groupId))
+        .orderBy(desc(matches.matchDate))
+        .limit(1)
+    )[0];
+    matchDate = nextGroupMatchDate(
+      grp?.defaultDayOfWeek,
+      grp?.defaultTime ?? "21:00",
+      new Date(),
+      lastM?.matchDate
+    );
   }
 
   const capacity = Number(formData.get("capacity")) || 10;
@@ -61,6 +75,36 @@ export async function adminOpenGroupMatch(formData: FormData) {
     notify: true,
   });
 
+  refreshGroup(groupSlug);
+}
+
+export async function adminGroupUpdateMatch(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  const matchId = Number(formData.get("matchId"));
+  if (!matchId) return;
+
+  const dateRaw = String(formData.get("matchDate") || "").trim();
+  const capacity = Number(formData.get("capacity")) || 10;
+  const format = String(formData.get("format") || "F5");
+
+  const updates: Record<string, any> = {
+    capacity,
+    format,
+  };
+
+  if (dateRaw) {
+    const matchDate = new Date(dateRaw);
+    const { signupWindow } = await import("@/lib/time");
+    const { opensAt, closesAt } = signupWindow(matchDate);
+    updates.matchDate = matchDate;
+    updates.signupOpensAt = opensAt;
+    updates.signupClosesAt = closesAt;
+  }
+
+  await db.update(matches).set(updates).where(eq(matches.id, matchId));
   refreshGroup(groupSlug);
 }
 
@@ -227,12 +271,27 @@ export async function adminGroupRemoveRow(rowId: number, groupSlug: string) {
   refreshGroup(groupSlug);
 }
 
+export async function adminGroupClearTeams(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  const matchId = Number(formData.get("matchId"));
+  if (!matchId) return;
+
+  await db.delete(teams).where(eq(teams.matchId, matchId));
+  refreshGroup(groupSlug);
+}
+
 export async function adminGroupAddPlayerToTeam(formData: FormData) {
   const groupId = Number(formData.get("groupId"));
   const groupSlug = String(formData.get("groupSlug"));
   await requireGroupAdmin(groupId);
 
-  const match = await getCurrentMatch(groupId);
+  const formMatchId = Number(formData.get("matchId"));
+  const match = formMatchId
+    ? (await db.select().from(matches).where(eq(matches.id, formMatchId)).limit(1))[0]
+    : await getCurrentMatch(groupId);
   if (!match) return;
   const playerId = Number(formData.get("playerId"));
   if (!playerId) return;
@@ -264,7 +323,10 @@ export async function adminGroupAddGuest(formData: FormData) {
   const groupSlug = String(formData.get("groupSlug"));
   await requireGroupAdmin(groupId);
 
-  const match = await getCurrentMatch(groupId);
+  const formMatchId = Number(formData.get("matchId"));
+  const match = formMatchId
+    ? (await db.select().from(matches).where(eq(matches.id, formMatchId)).limit(1))[0]
+    : await getCurrentMatch(groupId);
   if (!match) return;
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
@@ -304,7 +366,10 @@ export async function adminGroupSaveResult(formData: FormData) {
   const groupSlug = String(formData.get("groupSlug"));
   await requireGroupAdmin(groupId);
 
-  const match = await getCurrentMatch(groupId);
+  const formMatchId = Number(formData.get("matchId"));
+  const match = formMatchId
+    ? (await db.select().from(matches).where(eq(matches.id, formMatchId)).limit(1))[0]
+    : await getCurrentMatch(groupId);
   if (!match) return;
 
   const oldStandings = await getStandings(groupId);
@@ -338,16 +403,19 @@ export async function adminGroupSaveResult(formData: FormData) {
     .map((t) => ({ playerId: t.playerId as number, matchId: match.id, attended: true }));
   if (att.length) await db.insert(attendanceLog).values(att);
 
+  const wasAlreadyFinished = match.status === "finished";
   await db.update(matches).set({ status: "finished" }).where(eq(matches.id, match.id));
 
-  await notifyMatchCompletionAndAchievements({
-    matchId: match.id,
-    scoreA,
-    scoreB,
-    notes,
-    oldStandings,
-    oldStats,
-  });
+  if (!wasAlreadyFinished) {
+    await notifyMatchCompletionAndAchievements({
+      matchId: match.id,
+      scoreA,
+      scoreB,
+      notes,
+      oldStandings,
+      oldStats,
+    });
+  }
 
   // Guardar goles y asistencias si se incluyeron en el formulario
   const goalsEntries: { playerId: number; goals: number; assists: number }[] = [];
@@ -376,7 +444,45 @@ export async function adminGroupSaveResult(formData: FormData) {
   }
 
   refreshGroup(groupSlug);
-  redirect(`/grupos/${groupSlug}/admin/resultado?saved=1`);
+  redirect(`/grupos/${groupSlug}/admin/resultado?saved=1&matchId=${match.id}`);
+}
+
+// ─── Configuración del grupo ──────────────────────────────────────────────
+export async function adminGroupSaveSettings(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+
+  const { groups } = await import("@/db/schema");
+
+  const name = String(formData.get("name") || "").trim();
+  const format = String(formData.get("format") || "F5");
+  const defaultCapacity = Number(formData.get("defaultCapacity")) || 10;
+  const rawDay = formData.get("defaultDayOfWeek");
+  const defaultDayOfWeek = rawDay !== "" && rawDay !== null && rawDay !== undefined
+    ? parseInt(String(rawDay), 10)
+    : null;
+  const defaultTime = String(formData.get("defaultTime") || "21:00").trim();
+  const ptsWin = Number(formData.get("ptsWin") ?? 3);
+  const ptsDraw = Number(formData.get("ptsDraw") ?? 2);
+  const ptsLoss = Number(formData.get("ptsLoss") ?? 1);
+
+  await db
+    .update(groups)
+    .set({
+      ...(name ? { name } : {}),
+      format,
+      defaultCapacity,
+      defaultDayOfWeek,
+      defaultTime,
+      ptsWin,
+      ptsDraw,
+      ptsLoss,
+    })
+    .where(eq(groups.id, groupId));
+
+  refreshGroup(groupSlug);
+  redirect(`/grupos/${groupSlug}/admin/configuracion?saved=1`);
 }
 
 // ─── Push manual ──────────────────────────────────────────────────────────
