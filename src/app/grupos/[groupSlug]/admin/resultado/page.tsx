@@ -77,6 +77,8 @@ export default async function GroupAdminResultado({
     isGoalkeeper: r.isGoalkeeper,
     isGuest: r.isGuest,
     team: r.team as "A" | "B",
+    preferredPosition: r.preferredPosition,
+    preferredFoot: r.preferredFoot,
   }));
   const teamsSig = editorRows.map((r) => `${r.id}:${r.team}`).join(",");
 

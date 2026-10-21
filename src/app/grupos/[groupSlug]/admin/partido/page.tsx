@@ -135,6 +135,8 @@ export default async function GroupAdminPartido({
     isGoalkeeper: r.isGoalkeeper,
     isGuest: r.isGuest,
     team: r.team as "A" | "B",
+    preferredPosition: r.preferredPosition,
+    preferredFoot: r.preferredFoot,
   }));
   const teamsSig = editorRows.map((r) => `${r.id}:${r.team}`).join(",");
 
@@ -506,7 +508,7 @@ export default async function GroupAdminPartido({
           <summary className="cursor-pointer text-sm font-bold text-zinc-700 dark:text-zinc-300">
             ➕ Sumar del grupo a un equipo
           </summary>
-          <div className="space-y-1.5 max-h-[250px] overflow-y-auto pr-1 mt-3">
+          <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 mt-3">
             {players.filter((p) => !inTeamsIds.has(p.id)).length === 0 && (
               <p className="text-xs text-pitch-900/40 text-center py-2">Todos ya están en un equipo.</p>
             )}
@@ -515,21 +517,32 @@ export default async function GroupAdminPartido({
               .map((p) => (
                 <div
                   key={p.id}
-                  className="flex items-center gap-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 px-3 py-2 text-sm shadow-sm hover:border-pitch-200 transition-colors"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700 p-3 text-sm shadow-sm hover:border-pitch-300 dark:hover:border-pitch-600 transition-colors"
                 >
-                  <span className="flex-1 truncate font-medium">
-                    {p.isGoalkeeper && "🧤 "}
-                    {p.name}
-                  </span>
-                  <div className="flex gap-1">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-pitch-100 dark:bg-zinc-700 text-pitch-800 dark:text-pitch-200 flex items-center justify-center font-black text-xs shrink-0 shadow-2xs">
+                      {p.isGoalkeeper ? "🧤" : p.name.trim().charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <span className="font-extrabold text-sm text-zinc-900 dark:text-zinc-100 leading-snug break-words block">
+                        {p.name}
+                      </span>
+                      <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                        <span className="font-bold text-amber-600 dark:text-amber-400">⭐ {p.stars}</span>
+                        {p.preferredPosition && <span>• {p.preferredPosition}</span>}
+                        {p.isGoalkeeper && <span className="font-bold text-amber-600">• Arquero</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
                     <form action={adminGroupAddPlayerToTeam}>
                       <input type="hidden" name="groupId" value={group.id} />
                       <input type="hidden" name="groupSlug" value={group.slug} />
                       <input type="hidden" name="matchId" value={match.id} />
                       <input type="hidden" name="playerId" value={p.id} />
                       <input type="hidden" name="team" value="A" />
-                      <button className="rounded-lg bg-pitch-50 hover:bg-pitch-100 dark:bg-pitch-900/20 dark:hover:bg-pitch-900/40 border border-pitch-200 dark:border-pitch-800 px-2.5 py-1.5 text-xs font-bold text-pitch-700 dark:text-pitch-400 transition-colors">
-                        → {teamAName}
+                      <button className="rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 border border-emerald-300 dark:border-emerald-800 px-3 py-1.5 text-xs font-black text-emerald-800 dark:text-emerald-300 transition-colors shadow-2xs flex items-center gap-1">
+                        <span>→ {teamAName}</span>
                       </button>
                     </form>
                     <form action={adminGroupAddPlayerToTeam}>
@@ -538,8 +551,8 @@ export default async function GroupAdminPartido({
                       <input type="hidden" name="matchId" value={match.id} />
                       <input type="hidden" name="playerId" value={p.id} />
                       <input type="hidden" name="team" value="B" />
-                      <button className="rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 border border-blue-200 dark:border-blue-800 px-2.5 py-1.5 text-xs font-bold text-blue-700 dark:text-blue-400 transition-colors">
-                        → {teamBName}
+                      <button className="rounded-xl bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/60 border border-cyan-300 dark:border-cyan-800 px-3 py-1.5 text-xs font-black text-cyan-800 dark:text-cyan-300 transition-colors shadow-2xs flex items-center gap-1">
+                        <span>→ {teamBName}</span>
                       </button>
                     </form>
                   </div>
