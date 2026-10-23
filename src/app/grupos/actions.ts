@@ -42,46 +42,81 @@ export async function actionCreateGroup(formData: FormData) {
 
 // ─── Unirse con código ────────────────────────────────────────────────────
 export async function actionRequestJoin(formData: FormData) {
-  const player = await getCurrentPlayer();
-  if (!player) {
-    redirect(`/login?callbackUrl=${encodeURIComponent("/grupos/unirse")}`);
+  let redirectUrl = "";
+  let code = "";
+
+  try {
+    const player = await getCurrentPlayer();
+    if (!player) {
+      redirectUrl = `/login?callbackUrl=${encodeURIComponent("/grupos/unirse")}`;
+    } else {
+      code = String(formData.get("code") || "").trim().toUpperCase();
+      if (!code) {
+        redirectUrl = `/grupos/unirse?error=${encodeURIComponent("Ingresá el código de invitación")}`;
+      } else {
+        const { getGroupByInviteCode } = await import("@/lib/groups");
+        const group = await getGroupByInviteCode(code);
+        if (!group) {
+          redirectUrl = `/grupos/unirse?error=${encodeURIComponent("Código inválido. Revisá que esté bien escrito.")}&code=${encodeURIComponent(code)}`;
+        } else {
+          // 1. Ya es miembro activo del grupo
+          const existingMember = await db
+            .select({ id: groupMembers.id, status: groupMembers.status })
+            .from(groupMembers)
+            .where(and(eq(groupMembers.groupId, group.id), eq(groupMembers.playerId, player.id)))
+            .limit(1);
+
+          if (existingMember[0]?.status === "active") {
+            redirectUrl = `/grupos/${group.slug}`;
+          } else {
+            // 2. Verificar si ya tiene una solicitud previa en joinRequests
+            const existingReq = (
+              await db
+                .select({ id: joinRequests.id, status: joinRequests.status })
+                .from(joinRequests)
+                .where(and(eq(joinRequests.groupId, group.id), eq(joinRequests.playerId, player.id)))
+                .limit(1)
+            )[0];
+
+            const message = String(formData.get("message") || "").trim() || null;
+
+            if (existingReq) {
+              if (existingReq.status === "pending") {
+                redirectUrl = `/grupos/unirse/pendiente?grupo=${group.slug}&nombre=${encodeURIComponent(group.name)}`;
+              } else {
+                await db
+                  .update(joinRequests)
+                  .set({
+                    status: "pending",
+                    message,
+                    requestedAt: new Date(),
+                    resolvedAt: null,
+                    resolvedBy: null,
+                  })
+                  .where(eq(joinRequests.id, existingReq.id));
+                redirectUrl = `/grupos/unirse/pendiente?grupo=${group.slug}&nombre=${encodeURIComponent(group.name)}`;
+              }
+            } else {
+              await db.insert(joinRequests).values({
+                groupId: group.id,
+                playerId: player.id,
+                message,
+                status: "pending",
+              });
+              redirectUrl = `/grupos/unirse/pendiente?grupo=${group.slug}&nombre=${encodeURIComponent(group.name)}`;
+            }
+          }
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error("Error en actionRequestJoin:", err);
+    redirectUrl = `/grupos/unirse?error=${encodeURIComponent("No se pudo enviar la solicitud. Verificá el código o intentá nuevamente.")}${code ? `&code=${encodeURIComponent(code)}` : ""}`;
   }
 
-  const code = String(formData.get("code") || "").trim().toUpperCase();
-  if (!code) {
-    redirect(`/grupos/unirse?error=${encodeURIComponent("Ingresá el código de invitación")}`);
+  if (redirectUrl) {
+    redirect(redirectUrl);
   }
-
-  const { getGroupByInviteCode, hasExistingRequest } = await import("@/lib/groups");
-  const group = await getGroupByInviteCode(code);
-  if (!group) {
-    redirect(`/grupos/unirse?error=${encodeURIComponent("Código inválido. Revisá que esté bien escrito.")}&code=${encodeURIComponent(code)}`);
-  }
-
-  // Ya es miembro activo
-  const existing = await db
-    .select()
-    .from(groupMembers)
-    .where(and(eq(groupMembers.groupId, group.id), eq(groupMembers.playerId, player.id)))
-    .limit(1);
-  if (existing[0]?.status === "active") {
-    redirect(`/grupos/${group.slug}`);
-  }
-
-  // Ya tiene solicitud
-  const already = await hasExistingRequest(group.id, player.id);
-  if (already) {
-    redirect(`/grupos/unirse?error=${encodeURIComponent("Ya tenés una solicitud pendiente para este grupo.")}`);
-  }
-
-  await db.insert(joinRequests).values({
-    groupId: group.id,
-    playerId: player.id,
-    message: String(formData.get("message") || "").trim() || null,
-    status: "pending",
-  });
-
-  redirect(`/grupos/unirse/pendiente?grupo=${group.slug}&nombre=${encodeURIComponent(group.name)}`);
 }
 
 // ─── Aprobar solicitud ────────────────────────────────────────────────────

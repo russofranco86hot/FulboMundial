@@ -113,10 +113,12 @@ export async function getGroupBySlug(slug: string): Promise<Group | null> {
 export async function getGroupByInviteCode(code: string): Promise<Group | null> {
   const { ensureDbUpgrades } = await import("./db-migrations");
   await ensureDbUpgrades();
+  const cleanCode = (code || "").trim().toUpperCase();
+  if (!cleanCode) return null;
   const rows = await db
     .select()
     .from(groups)
-    .where(eq(groups.inviteCode, code.toUpperCase()))
+    .where(sql`upper(trim(${groups.inviteCode})) = ${cleanCode}`)
     .limit(1);
   return rows[0] ?? null;
 }

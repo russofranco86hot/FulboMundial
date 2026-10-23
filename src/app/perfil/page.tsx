@@ -101,13 +101,21 @@ export default async function PerfilPage({
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{player.email || user.email}</p>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <span className="chip bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[11px] font-bold px-2 py-0.5">
-                ⭐ {player.stars}
-              </span>
-              <span className="chip bg-pitch-100 dark:bg-pitch-950/60 text-pitch-800 dark:text-pitch-300 text-[11px] font-bold px-2 py-0.5">
+              <span className="chip bg-pitch-100 dark:bg-pitch-950/60 text-pitch-800 dark:text-pitch-300 text-[11px] font-bold px-2.5 py-0.5">
                 <Layers size={11} className="inline mr-1" />
-                {playerGroups.length} {playerGroups.length === 1 ? "grupo" : "grupos"}
+                {playerGroups.length} {playerGroups.length === 1 ? "grupo activo" : "grupos activos"}
               </span>
+              {player.preferredPosition && (
+                <span className="chip bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-[11px] font-bold px-2.5 py-0.5 border border-zinc-200/50 dark:border-zinc-700">
+                  {player.preferredPosition === "GK"
+                    ? "🧤 Arquero"
+                    : player.preferredPosition === "DEF"
+                    ? "🛡️ Defensor"
+                    : player.preferredPosition === "DEL"
+                    ? "⚡ Delantero"
+                    : "🎯 Mediocampista"}
+                </span>
+              )}
             </div>
           </div>
         </div>
