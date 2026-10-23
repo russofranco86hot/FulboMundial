@@ -119,48 +119,154 @@ export async function actionRequestJoin(formData: FormData) {
   }
 }
 
-// ─── Aprobar solicitud ────────────────────────────────────────────────────
+// ─── Aprobar solicitud (como nuevo miembro o vinculado a existente) ──────
 export async function actionApproveRequest(formData: FormData) {
   const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug") || "");
   await requireGroupAdmin(groupId);
 
   const requestId = Number(formData.get("requestId"));
-  const playerId = Number(formData.get("playerId"));
+  const requestingPlayerId = Number(formData.get("playerId"));
+  const linkToPlayerId = formData.get("linkToPlayerId")
+    ? Number(formData.get("linkToPlayerId"))
+    : null;
 
-  // Resolver solicitud
   const resolver = await getCurrentPlayer();
-  await db
-    .update(joinRequests)
-    .set({ status: "approved", resolvedAt: new Date(), resolvedBy: resolver?.id })
-    .where(eq(joinRequests.id, requestId));
 
-  // Agregar como miembro activo
-  const existing = await db
-    .select()
-    .from(groupMembers)
-    .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.playerId, playerId)))
-    .limit(1);
+  if (linkToPlayerId && linkToPlayerId !== requestingPlayerId) {
+    // ─── VINCULAR A JUGADOR EXISTENTE CON HISTORIAL ───
+    const requestingPlayer = (
+      await db.select().from(players).where(eq(players.id, requestingPlayerId)).limit(1)
+    )[0];
 
-  if (existing[0]) {
-    await db
-      .update(groupMembers)
-      .set({ status: "active" })
-      .where(eq(groupMembers.id, existing[0].id));
+    const targetPlayer = (
+      await db.select().from(players).where(eq(players.id, linkToPlayerId)).limit(1)
+    )[0];
+
+    if (requestingPlayer && targetPlayer) {
+      // 1. Desvincular googleId y email de requestingPlayer para evitar conflicto de clave única
+      await db
+        .update(players)
+        .set({ googleId: null, email: null })
+        .where(eq(players.id, requestingPlayerId));
+
+      // 2. Transferir googleId, email y teléfono a targetPlayer
+      await db
+        .update(players)
+        .set({
+          googleId: requestingPlayer.googleId ?? targetPlayer.googleId,
+          email: requestingPlayer.email ?? targetPlayer.email,
+          phone: targetPlayer.phone ?? requestingPlayer.phone,
+        })
+        .where(eq(players.id, linkToPlayerId));
+
+      // 3. Transferir credenciales y suscripciones push si existieran
+      const { playerCredentials, pushSubscriptions, nameChangeRequests } = await import("@/db/schema");
+      try {
+        await db
+          .update(playerCredentials)
+          .set({ playerId: linkToPlayerId })
+          .where(eq(playerCredentials.playerId, requestingPlayerId));
+      } catch {}
+
+      try {
+        await db
+          .update(pushSubscriptions)
+          .set({ playerId: linkToPlayerId })
+          .where(eq(pushSubscriptions.playerId, requestingPlayerId));
+      } catch {}
+
+      try {
+        await db
+          .update(nameChangeRequests)
+          .set({ playerId: linkToPlayerId })
+          .where(eq(nameChangeRequests.playerId, requestingPlayerId));
+      } catch {}
+
+      // 4. Asegurar que targetPlayer sea miembro activo del grupo
+      const existingMember = (
+        await db
+          .select()
+          .from(groupMembers)
+          .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.playerId, linkToPlayerId)))
+          .limit(1)
+      )[0];
+
+      if (existingMember) {
+        await db
+          .update(groupMembers)
+          .set({ status: "active" })
+          .where(eq(groupMembers.id, existingMember.id));
+      } else {
+        await db.insert(groupMembers).values({
+          groupId,
+          playerId: linkToPlayerId,
+          role: "member",
+          status: "active",
+        });
+      }
+
+      // 5. Marcar solicitud resuelta
+      await db
+        .update(joinRequests)
+        .set({
+          status: "approved",
+          playerId: linkToPlayerId,
+          resolvedAt: new Date(),
+          resolvedBy: resolver?.id,
+        })
+        .where(eq(joinRequests.id, requestId));
+
+      // 6. Limpiar el registro duplicado requestingPlayer
+      try {
+        await db.delete(groupMembers).where(eq(groupMembers.playerId, requestingPlayerId));
+        await db.delete(joinRequests).where(eq(joinRequests.playerId, requestingPlayerId));
+        await db.delete(players).where(eq(players.id, requestingPlayerId));
+      } catch (e) {
+        console.warn("Could not delete temporary requesting player:", e);
+      }
+    }
   } else {
-    await db.insert(groupMembers).values({
-      groupId,
-      playerId,
-      role: "member",
-      status: "active",
-    });
+    // ─── APROBAR COMO NUEVO MIEMBRO (NORMAL) ───
+    await db
+      .update(joinRequests)
+      .set({ status: "approved", resolvedAt: new Date(), resolvedBy: resolver?.id })
+      .where(eq(joinRequests.id, requestId));
+
+    const existing = await db
+      .select()
+      .from(groupMembers)
+      .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.playerId, requestingPlayerId)))
+      .limit(1);
+
+    if (existing[0]) {
+      await db
+        .update(groupMembers)
+        .set({ status: "active" })
+        .where(eq(groupMembers.id, existing[0].id));
+    } else {
+      await db.insert(groupMembers).values({
+        groupId,
+        playerId: requestingPlayerId,
+        role: "member",
+        status: "active",
+      });
+    }
   }
 
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}/admin/solicitudes`);
+    revalidatePath(`/grupos/${groupSlug}/admin/jugadores`);
+    revalidatePath(`/grupos/${groupSlug}`);
+  }
   revalidatePath(`/grupos`);
+  revalidatePath(`/perfil`);
 }
 
 // ─── Rechazar solicitud ───────────────────────────────────────────────────
 export async function actionRejectRequest(formData: FormData) {
   const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug") || "");
   await requireGroupAdmin(groupId);
 
   const requestId = Number(formData.get("requestId"));
@@ -171,6 +277,9 @@ export async function actionRejectRequest(formData: FormData) {
     .set({ status: "rejected", resolvedAt: new Date(), resolvedBy: resolver?.id })
     .where(eq(joinRequests.id, requestId));
 
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}/admin/solicitudes`);
+  }
   revalidatePath(`/grupos`);
 }
 

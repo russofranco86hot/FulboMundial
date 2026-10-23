@@ -1,4 +1,4 @@
-import { getGroupBySlug, getPendingJoinRequests } from "@/lib/groups";
+import { getGroupBySlug, getPendingJoinRequests, getGroupMembers } from "@/lib/groups";
 import { getPendingNameRequestsForGroup } from "@/lib/name-requests";
 import { formatArt } from "@/lib/time";
 import {
@@ -7,7 +7,7 @@ import {
   actionApproveNameChange,
   actionRejectNameChange,
 } from "@/app/grupos/actions";
-import { Check, X, Clock, UserCheck, Edit3, ArrowRight } from "lucide-react";
+import { Check, X, Clock, UserCheck, Edit3, ArrowRight, Link2 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { CopyInviteCode } from "@/components/copy-invite-code";
 
@@ -22,11 +22,13 @@ export default async function SolicitudesPage({
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();
 
-  const [joinRequestsList, nameRequestsList] = await Promise.all([
+  const [joinRequestsList, nameRequestsList, groupMembersList] = await Promise.all([
     getPendingJoinRequests(group.id),
     getPendingNameRequestsForGroup(group.id),
+    getGroupMembers(group.id),
   ]);
 
+  const candidateMembers = groupMembersList.sort((a, b) => a.name.localeCompare(b.name));
   const totalPending = joinRequestsList.length + nameRequestsList.length;
 
   return (
@@ -133,13 +135,13 @@ export default async function SolicitudesPage({
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-extrabold uppercase tracking-wider text-pitch-800 dark:text-zinc-200 flex items-center gap-2">
                   <UserCheck size={15} className="text-emerald-500" />
-                  <span>Nuevos miembros ({joinRequestsList.length})</span>
+                  <span>Peticiones para unirse ({joinRequestsList.length})</span>
                 </h3>
               </div>
 
               <div className="space-y-3">
                 {joinRequestsList.map((req) => (
-                  <div key={req.id} className="card space-y-3 animate-slide-up">
+                  <div key={req.id} className="card space-y-3.5 animate-slide-up border border-pitch-200/80 dark:border-zinc-800">
                     <div className="flex items-start justify-between">
                       <div>
                         <h4 className="font-extrabold text-sm text-pitch-800 dark:text-zinc-100">{req.playerName}</h4>
@@ -157,24 +159,57 @@ export default async function SolicitudesPage({
                       </div>
                     )}
 
-                    <div className="flex gap-2 pt-1 border-t border-pitch-100/50 dark:border-zinc-800">
-                      <form action={actionApproveRequest} className="flex-1">
-                        <input type="hidden" name="groupId" value={group.id} />
-                        <input type="hidden" name="requestId" value={req.id} />
-                        <input type="hidden" name="playerId" value={req.playerId} />
-                        <button className="btn-primary w-full text-xs py-2 flex items-center justify-center gap-1.5 shadow-sm">
-                          <Check size={14} /> Aprobar ingreso
-                        </button>
-                      </form>
+                    {/* Formulario de Aprobación / Asignación */}
+                    <form action={actionApproveRequest} className="space-y-3 pt-2 border-t border-pitch-100/60 dark:border-zinc-800">
+                      <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="groupSlug" value={group.slug} />
+                      <input type="hidden" name="requestId" value={req.id} />
+                      <input type="hidden" name="playerId" value={req.playerId} />
 
-                      <form action={actionRejectRequest} className="flex-1">
-                        <input type="hidden" name="groupId" value={group.id} />
-                        <input type="hidden" name="requestId" value={req.id} />
-                        <button className="btn-ghost w-full text-xs py-2 flex items-center justify-center gap-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20">
+                      {/* Opción para vincular esta cuenta a un miembro existente con historial */}
+                      {candidateMembers.length > 0 && (
+                        <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded-2xl border border-zinc-200/80 dark:border-zinc-700/60 space-y-2">
+                          <label className="block text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+                            <Link2 size={14} className="text-pitch-600 dark:text-pitch-400" />
+                            <span>¿Asignar esta cuenta a un miembro existente?</span>
+                          </label>
+                          <select
+                            name="linkToPlayerId"
+                            defaultValue=""
+                            className="input w-full py-1.5 px-2.5 text-xs font-semibold bg-white dark:bg-zinc-800"
+                          >
+                            <option value="">Aprobar como nuevo miembro independiente</option>
+                            {candidateMembers
+                              .filter((m) => m.playerId !== req.playerId)
+                              .map((m) => (
+                                <option key={m.playerId} value={m.playerId}>
+                                  Vincular a: {m.name} {!m.googleId ? "⭐ (sin cuenta vinculada)" : "✓ (cuenta vinculada)"}
+                                </option>
+                              ))}
+                          </select>
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-normal">
+                            💡 Si seleccionás un jugador existente, este usuario heredará de inmediato su historial de partidos, goles, votos y estadísticas cargadas.
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          className="btn-primary flex-1 text-xs py-2.5 flex items-center justify-center gap-1.5 shadow-sm font-bold"
+                        >
+                          <Check size={14} /> Aprobar solicitud
+                        </button>
+
+                        <button
+                          type="submit"
+                          formAction={actionRejectRequest}
+                          className="btn-ghost text-xs py-2.5 px-3 flex items-center justify-center gap-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 border-red-200 dark:border-red-900/40 rounded-xl font-bold"
+                        >
                           <X size={14} /> Rechazar
                         </button>
-                      </form>
-                    </div>
+                      </div>
+                    </form>
                   </div>
                 ))}
               </div>
