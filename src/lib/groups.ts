@@ -186,8 +186,9 @@ export async function hasExistingRequest(
   return rows.length > 0;
 }
 
-/** Cuenta las solicitudes pendientes de un grupo. */
+/** Cuenta las solicitudes pendientes de un grupo (ingresos + cambios de nombre). */
 export async function countPendingRequests(groupId: number): Promise<number> {
+  const { countPendingNameRequests } = await import("./name-requests");
   const rows = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(joinRequests)
@@ -197,7 +198,8 @@ export async function countPendingRequests(groupId: number): Promise<number> {
         eq(joinRequests.status, "pending")
       )
     );
-  return rows[0]?.count ?? 0;
+  const nameCount = await countPendingNameRequests(groupId);
+  return (rows[0]?.count ?? 0) + nameCount;
 }
 
 /** Último partido finalizado de un grupo. */

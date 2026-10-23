@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Home, Users, Trophy, TrendingUp, Settings, PlusCircle, LogIn, Layers } from "lucide-react";
+import { Home, Users, Trophy, TrendingUp, Settings, PlusCircle, LogIn, Layers, User } from "lucide-react";
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -30,6 +30,7 @@ export function BottomNav() {
         { href: "/grupos", exact: true, label: "Mis Grupos", icon: Layers },
         { href: "/grupos/nuevo", label: "Crear", icon: PlusCircle },
         { href: "/grupos/unirse", label: "Unirse", icon: LogIn },
+        { href: "/perfil", label: "Perfil", icon: User },
       ];
 
   return (

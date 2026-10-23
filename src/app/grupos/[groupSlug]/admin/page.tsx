@@ -111,7 +111,7 @@ export default async function GroupAdminHome({
               <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
                 {pendingRequests} solicitud{pendingRequests > 1 ? "es" : ""} pendiente{pendingRequests > 1 ? "s" : ""}
               </p>
-              <p className="text-xs text-amber-700 dark:text-amber-400">Jugadores esperando aprobación</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">Ingresos o cambios de nombre esperando aprobación</p>
             </div>
           </div>
           <Link

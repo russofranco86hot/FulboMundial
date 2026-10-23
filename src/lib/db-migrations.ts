@@ -88,6 +88,27 @@ export async function ensureDbUpgrades() {
       console.warn("Migration notice (team names columns):", e);
     }
 
+    // 7. Solicitudes de cambio de nombre de jugadores
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS name_change_requests (
+          id SERIAL PRIMARY KEY,
+          player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+          current_name TEXT NOT NULL,
+          requested_name TEXT NOT NULL,
+          group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          resolved_at TIMESTAMPTZ,
+          resolved_by INTEGER REFERENCES players(id) ON DELETE SET NULL
+        );
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS name_change_requests_status_idx ON name_change_requests(status);`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS name_change_requests_player_idx ON name_change_requests(player_id);`);
+    } catch (e) {
+      console.warn("Migration notice (name_change_requests):", e);
+    }
+
     migrationsRun = true;
   } catch (err) {
     console.error("Error running DB upgrades:", err);

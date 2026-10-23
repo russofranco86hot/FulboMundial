@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getSessionUser, getCurrentPlayer, requireGroupAdmin, getPlayerGroupRole } from "@/lib/session";
 import { createGroup } from "@/lib/groups";
-import { db, groupMembers, joinRequests, players } from "@/db";
+import { db, groupMembers, joinRequests, nameChangeRequests, players } from "@/db";
 import { and, eq } from "drizzle-orm";
 
 // ─── Crear grupo ──────────────────────────────────────────────────────────
@@ -137,6 +137,74 @@ export async function actionRejectRequest(formData: FormData) {
     .where(eq(joinRequests.id, requestId));
 
   revalidatePath(`/grupos`);
+}
+
+// ─── Aprobar cambio de nombre ─────────────────────────────────────────────
+export async function actionApproveNameChange(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  await requireGroupAdmin(groupId);
+
+  const requestId = Number(formData.get("requestId"));
+  const groupSlug = String(formData.get("groupSlug") || "");
+  const resolver = await getCurrentPlayer();
+
+  const req = (
+    await db
+      .select()
+      .from(nameChangeRequests)
+      .where(eq(nameChangeRequests.id, requestId))
+      .limit(1)
+  )[0];
+
+  if (req && req.status === "pending") {
+    // 1. Actualizar el nombre del jugador en players
+    await db
+      .update(players)
+      .set({ name: req.requestedName })
+      .where(eq(players.id, req.playerId));
+
+    // 2. Marcar solicitud como aprobada
+    await db
+      .update(nameChangeRequests)
+      .set({
+        status: "approved",
+        resolvedAt: new Date(),
+        resolvedBy: resolver?.id,
+      })
+      .where(eq(nameChangeRequests.id, requestId));
+  }
+
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}/admin/solicitudes`);
+    revalidatePath(`/grupos/${groupSlug}`);
+  }
+  revalidatePath(`/grupos`);
+  revalidatePath(`/perfil`);
+}
+
+// ─── Rechazar cambio de nombre ────────────────────────────────────────────
+export async function actionRejectNameChange(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  await requireGroupAdmin(groupId);
+
+  const requestId = Number(formData.get("requestId"));
+  const groupSlug = String(formData.get("groupSlug") || "");
+  const resolver = await getCurrentPlayer();
+
+  await db
+    .update(nameChangeRequests)
+    .set({
+      status: "rejected",
+      resolvedAt: new Date(),
+      resolvedBy: resolver?.id,
+    })
+    .where(eq(nameChangeRequests.id, requestId));
+
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}/admin/solicitudes`);
+  }
+  revalidatePath(`/grupos`);
+  revalidatePath(`/perfil`);
 }
 
 // ─── Promover miembro a admin ─────────────────────────────────────────────

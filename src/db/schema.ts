@@ -396,3 +396,28 @@ export type MatchPayment = typeof matchPayments.$inferSelect;
 export type PlayerPayment = typeof playerPayments.$inferSelect;
 export type MatchGoal = typeof matchGoals.$inferSelect;
 
+// ─── name_change_requests ──────────────────────────────────────────────────
+export const nameChangeRequests = pgTable(
+  "name_change_requests",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id")
+      .notNull()
+      .references(() => players.id, { onDelete: "cascade" }),
+    currentName: text("current_name").notNull(),
+    requestedName: text("requested_name").notNull(),
+    groupId: integer("group_id").references(() => groups.id, { onDelete: "set null" }),
+    status: text("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedBy: integer("resolved_by").references(() => players.id, { onDelete: "set null" }),
+  },
+  (t) => ({
+    byStatus: index("name_change_requests_status_idx").on(t.status),
+    byPlayer: index("name_change_requests_player_idx").on(t.playerId),
+  })
+);
+
+export type NameChangeRequest = typeof nameChangeRequests.$inferSelect;
+
+

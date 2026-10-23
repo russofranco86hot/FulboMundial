@@ -5,7 +5,7 @@ import { getCurrentMatch } from "@/lib/queries";
 import { getPlayerComment } from "@/lib/player-comments";
 import { formatArt } from "@/lib/time";
 import Link from "next/link";
-import { PlusCircle, LogIn, ChevronRight, Calendar, Users, Shield } from "lucide-react";
+import { PlusCircle, LogIn, ChevronRight, Calendar, Users, Shield, User } from "lucide-react";
 import { db, matches, results, groups } from "@/db";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { ensureDbUpgrades } from "@/lib/db-migrations";
@@ -86,6 +86,14 @@ export default async function GruposPage() {
           </h1>
           <p className="text-sm text-pitch-900/60 dark:text-zinc-400">Hola, {player.name}</p>
         </div>
+        <Link
+          href="/perfil"
+          className="btn-ghost text-xs py-1.5 px-3 rounded-xl font-bold flex items-center gap-1.5 border border-zinc-200 dark:border-zinc-700 shadow-2xs hover:border-pitch-400"
+          title="Ver mi perfil y cambiar nombre"
+        >
+          <User size={14} className="text-pitch-600 dark:text-pitch-400" />
+          <span>Mi Perfil</span>
+        </Link>
       </div>
 
       {primaryComment && playerGroups.length > 0 && (

@@ -6,6 +6,7 @@ import { InstallBanner } from "@/components/install-banner";
 import { Arcade } from "@/components/arcade";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserHeader } from "@/components/user-header";
 
 export const metadata: Metadata = {
   title: "FulboMundial",
@@ -46,7 +47,8 @@ export default function RootLayout({
     <html lang="es-AR" suppressHydrationWarning>
       <body className="min-h-screen">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-          <div className="fixed top-4 right-4 z-50">
+          <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+            <UserHeader />
             <ThemeToggle />
           </div>
           <main className="mx-auto w-full max-w-md px-4 pb-28 pt-4">{children}</main>
