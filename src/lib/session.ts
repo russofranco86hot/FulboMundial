@@ -50,8 +50,40 @@ export async function getCurrentPlayer(): Promise<Player | null> {
       .limit(1);
   }
 
-  const player = rows[0] ?? null;
-  if (player && user.googleId && !player.googleId) {
+  let player = rows[0] ?? null;
+
+  // Si el usuario está autenticado pero aún no tiene fila en players, la creamos automáticamente
+  if (!player && (user.email || user.googleId)) {
+    try {
+      const defaultName =
+        user.name?.trim() || (user.email ? user.email.split("@")[0] : "Jugador");
+      const inserted = await db
+        .insert(players)
+        .values({
+          name: defaultName,
+          email: user.email ? user.email.toLowerCase().trim() : null,
+          googleId: user.googleId || null,
+          stars: "3.0",
+          priorityOrder: 99,
+          preferredPosition: "MED",
+          preferredFoot: "R",
+        })
+        .returning();
+      if (inserted[0]) {
+        player = inserted[0];
+      }
+    } catch (e) {
+      console.error("Error auto-creando jugador para usuario autenticado:", e);
+      try {
+        const requery = await db
+          .select()
+          .from(players)
+          .where(conds.length === 1 ? conds[0] : or(...conds))
+          .limit(1);
+        player = requery[0] ?? null;
+      } catch {}
+    }
+  } else if (player && user.googleId && !player.googleId) {
     await db.update(players).set({ googleId: user.googleId }).where(eq(players.id, player.id));
     player.googleId = user.googleId;
   }

@@ -4,12 +4,18 @@ import { actionCreateGroup } from "../actions";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
-export default async function NuevoGrupoPage() {
+export default async function NuevoGrupoPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ error?: string }>;
+}) {
   const user = await getSessionUser();
-  if (!user) redirect("/");
+  if (!user) redirect(`/login?callbackUrl=${encodeURIComponent("/grupos/nuevo")}`);
 
   const player = await getCurrentPlayer();
-  if (!player) redirect("/grupos");
+  if (!player) redirect(`/login?callbackUrl=${encodeURIComponent("/grupos/nuevo")}`);
+
+  const params = searchParams ? await searchParams : {};
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -22,6 +28,12 @@ export default async function NuevoGrupoPage() {
           <p className="text-sm text-pitch-900/60 dark:text-zinc-400">Vas a ser el administrador</p>
         </div>
       </div>
+
+      {params.error && (
+        <div className="card bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm p-3 rounded-xl">
+          {params.error}
+        </div>
+      )}
 
       <form action={actionCreateGroup} className="space-y-4">
         <div className="card space-y-4">

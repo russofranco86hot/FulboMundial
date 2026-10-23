@@ -26,6 +26,7 @@ import { db, matches } from "@/db";
 import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CopyInviteCode } from "@/components/copy-invite-code";
 
 export const dynamic = "force-dynamic";
 
@@ -98,14 +99,7 @@ export default async function GroupAdminHome({
         <p className="text-xs text-pitch-900/60 dark:text-zinc-400">
           Compartí este código para que nuevos jugadores soliciten sumarse al grupo:
         </p>
-        <div className="flex items-center gap-2 bg-white dark:bg-zinc-800/80 p-3 rounded-2xl border border-pitch-200/80 dark:border-zinc-700">
-          <span className="font-mono text-xl font-black tracking-widest text-pitch-700 dark:text-pitch-400 select-all">
-            {group.inviteCode}
-          </span>
-          <span className="text-xs text-pitch-900/40 dark:text-zinc-500 ml-auto font-mono">
-            /grupos/unirse?code={group.inviteCode}
-          </span>
-        </div>
+        <CopyInviteCode code={group.inviteCode} groupName={group.name} />
       </div>
 
       {/* Alerta de solicitudes pendientes */}

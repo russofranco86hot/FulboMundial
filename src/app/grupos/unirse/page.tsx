@@ -9,11 +9,14 @@ export default async function UnirsePage({
 }: {
   searchParams: Promise<{ code?: string; error?: string }>;
 }) {
+  const params = await searchParams;
   const user = await getSessionUser();
-  if (!user) redirect("/");
+  if (!user) {
+    const callback = params.code ? `/grupos/unirse?code=${params.code}` : "/grupos/unirse";
+    redirect(`/login?callbackUrl=${encodeURIComponent(callback)}`);
+  }
 
   const player = await getCurrentPlayer();
-  const params = await searchParams;
 
   return (
     <div className="space-y-6 animate-fade-in">

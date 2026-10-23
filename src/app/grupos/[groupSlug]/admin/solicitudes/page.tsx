@@ -3,6 +3,7 @@ import { formatArt } from "@/lib/time";
 import { actionApproveRequest, actionRejectRequest } from "@/app/grupos/actions";
 import { Check, X, Clock, UserCheck } from "lucide-react";
 import { notFound } from "next/navigation";
+import { CopyInviteCode } from "@/components/copy-invite-code";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export default async function SolicitudesPage({
           Solicitudes de acceso
         </h2>
         <p className="text-xs text-pitch-900/60 dark:text-zinc-400 mt-0.5">
-          Aprobá o rechazá los jugadores que pidieron sumarse con el código <strong>{group.inviteCode}</strong>.
+          Aprobá o rechazá los jugadores que pidieron sumarse con el código <CopyInviteCode code={group.inviteCode} inline />.
         </p>
       </div>
 

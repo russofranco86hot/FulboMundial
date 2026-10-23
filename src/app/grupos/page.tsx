@@ -58,11 +58,16 @@ export default async function GruposPage() {
           <div className="text-4xl">👋</div>
           <p className="font-bold dark:text-zinc-100">¡Bienvenido!</p>
           <p className="text-sm text-pitch-900/60 dark:text-zinc-400">
-            Tu cuenta de Google ({user.email}) está lista. Para continuar, un administrador de grupo debe vincularte, o podés crear tu propio grupo.
+            Tu cuenta ({user.email}) está lista. Podés crear tu propio grupo o unirte con un código de invitación.
           </p>
-          <Link href="/grupos/nuevo" className="btn-primary w-full flex items-center justify-center gap-2">
-            <PlusCircle size={18} /> Crear mi primer grupo
-          </Link>
+          <div className="space-y-2 pt-2">
+            <Link href="/grupos/nuevo" className="btn-primary w-full flex items-center justify-center gap-2">
+              <PlusCircle size={18} /> Crear mi primer grupo
+            </Link>
+            <Link href="/grupos/unirse" className="btn-ghost w-full flex items-center justify-center gap-2">
+              <LogIn size={18} /> Unirse con código
+            </Link>
+          </div>
         </div>
       </div>
     );

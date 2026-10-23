@@ -10,10 +10,14 @@ import { and, eq } from "drizzle-orm";
 // ─── Crear grupo ──────────────────────────────────────────────────────────
 export async function actionCreateGroup(formData: FormData) {
   const player = await getCurrentPlayer();
-  if (!player) throw new Error("No autenticado");
+  if (!player) {
+    redirect(`/login?callbackUrl=${encodeURIComponent("/grupos/nuevo")}`);
+  }
 
   const name = String(formData.get("name") || "").trim();
-  if (!name) throw new Error("El nombre es requerido");
+  if (!name) {
+    redirect(`/grupos/nuevo?error=${encodeURIComponent("Ingresá un nombre para el grupo")}`);
+  }
 
   const format = String(formData.get("format") || "F5");
   const defaultCapacity = parseInt(String(formData.get("defaultCapacity") || "10"), 10);
@@ -39,7 +43,9 @@ export async function actionCreateGroup(formData: FormData) {
 // ─── Unirse con código ────────────────────────────────────────────────────
 export async function actionRequestJoin(formData: FormData) {
   const player = await getCurrentPlayer();
-  if (!player) throw new Error("No autenticado");
+  if (!player) {
+    redirect(`/login?callbackUrl=${encodeURIComponent("/grupos/unirse")}`);
+  }
 
   const code = String(formData.get("code") || "").trim().toUpperCase();
   if (!code) {

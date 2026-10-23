@@ -167,7 +167,7 @@ export async function getPendingJoinRequests(groupId: number) {
     .orderBy(joinRequests.requestedAt);
 }
 
-/** Verifica si el jugador ya tiene una solicitud activa para este grupo. */
+/** Verifica si el jugador ya tiene una solicitud pendiente para este grupo. */
 export async function hasExistingRequest(
   groupId: number,
   playerId: number
@@ -178,7 +178,8 @@ export async function hasExistingRequest(
     .where(
       and(
         eq(joinRequests.groupId, groupId),
-        eq(joinRequests.playerId, playerId)
+        eq(joinRequests.playerId, playerId),
+        eq(joinRequests.status, "pending")
       )
     )
     .limit(1);
