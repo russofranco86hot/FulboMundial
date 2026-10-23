@@ -7,6 +7,7 @@ import { Arcade } from "@/components/arcade";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserHeader } from "@/components/user-header";
+import { getSessionUser, getPlayerGroups } from "@/lib/session";
 
 export const metadata: Metadata = {
   title: "FulboMundial",
@@ -38,11 +39,17 @@ export const viewport: Viewport = {
 };
 
 // Layout principal de la aplicación
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const user = await getSessionUser();
+  const playerGroups = user ? await getPlayerGroups() : [];
+  const adminGroupSlugs = playerGroups
+    .filter((g) => g.role === "admin")
+    .map((g) => g.slug);
+
   return (
     <html lang="es-AR" suppressHydrationWarning>
       <body className="min-h-screen">
@@ -55,7 +62,7 @@ export default function RootLayout({
           <InstallBanner />
           <PushManager />
           <Arcade />
-          <BottomNav />
+          <BottomNav adminGroupSlugs={adminGroupSlugs} />
         </ThemeProvider>
       </body>
     </html>

@@ -113,11 +113,30 @@ export async function getPlayerGroupRole(
     )
     .limit(1);
 
-  return row[0]?.role ?? null;
+  if (row[0]?.role) {
+    return row[0].role;
+  }
+
+  // Si no está registrado en groupMembers pero es el creador específico de este grupo
+  const grp = (
+    await db
+      .select({ createdBy: groups.createdBy })
+      .from(groups)
+      .where(eq(groups.id, groupId))
+      .limit(1)
+  )[0];
+
+  if (grp && grp.createdBy === player.id) {
+    return "admin";
+  }
+
+  return null;
 }
 
 /**
  * Verifica si el jugador actual es admin del grupo.
+ * SOLO retorna true si el jugador tiene el rol 'admin' en group_members,
+ * o si es estrictamente el creador del grupo.
  */
 export async function isGroupAdmin(groupId: number): Promise<boolean> {
   const role = await getPlayerGroupRole(groupId);
@@ -126,20 +145,16 @@ export async function isGroupAdmin(groupId: number): Promise<boolean> {
   const player = await getCurrentPlayer();
   if (!player) return false;
 
-  // 1. Si el grupo no tiene NINGÚN admin activo (ej: grupo recién migrado de versión previa)
-  const admins = await db
-    .select({ id: groupMembers.id })
-    .from(groupMembers)
-    .where(
-      and(
-        eq(groupMembers.groupId, groupId),
-        eq(groupMembers.role, "admin"),
-        eq(groupMembers.status, "active")
-      )
-    )
-    .limit(1);
+  // Solo como respaldo estricto si es el creador original de este grupo específico
+  const grp = (
+    await db
+      .select({ createdBy: groups.createdBy })
+      .from(groups)
+      .where(eq(groups.id, groupId))
+      .limit(1)
+  )[0];
 
-  if (admins.length === 0) {
+  if (grp && grp.createdBy === player.id) {
     await db
       .insert(groupMembers)
       .values({ groupId, playerId: player.id, role: "admin", status: "active" })
@@ -148,24 +163,6 @@ export async function isGroupAdmin(groupId: number): Promise<boolean> {
         set: { role: "admin", status: "active" },
       });
     return true;
-  }
-
-  // 2. Si el usuario actual es creador de algún grupo en la plataforma, tiene permisos de admin
-  const isCreator = await db
-    .select({ id: groups.id })
-    .from(groups)
-    .where(eq(groups.createdBy, player.id))
-    .limit(1);
-
-  if (isCreator.length > 0) {
-    const grp = (await db.select({ slug: groups.slug }).from(groups).where(eq(groups.id, groupId)).limit(1))[0];
-    if (grp?.slug === "futbol-miercoles") {
-      await db
-        .update(groupMembers)
-        .set({ role: "admin" })
-        .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.playerId, player.id)));
-      return true;
-    }
   }
 
   return false;

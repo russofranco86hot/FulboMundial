@@ -1,7 +1,7 @@
 import { getGroupBySlug, getGroupMembers } from "@/lib/groups";
 import { getStandings } from "@/lib/queries";
 import { suggestRating } from "@/lib/rating";
-import { actionPromoteToAdmin, actionRemoveMember } from "@/app/grupos/actions";
+import { actionPromoteToAdmin, actionDemoteAdmin, actionRemoveMember } from "@/app/grupos/actions";
 import {
   adminGroupUpdatePlayer,
   adminGroupSetStars,
@@ -215,13 +215,28 @@ export default async function GroupAdminJugadores({
                 </div>
 
                 <div className="flex items-center gap-1">
-                  {m.role !== "admin" && (
-                    <form action={actionPromoteToAdmin}>
+                  {m.role === "admin" ? (
+                    <form action={actionDemoteAdmin}>
                       <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="groupSlug" value={group.slug} />
                       <input type="hidden" name="memberId" value={m.memberId} />
                       <button
+                        type="submit"
+                        title="Quitar rol de Administrador"
+                        className="text-[11px] text-amber-600 hover:text-amber-700 dark:text-amber-400 font-semibold px-2 py-1 rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 transition-colors"
+                      >
+                        Quitar admin
+                      </button>
+                    </form>
+                  ) : (
+                    <form action={actionPromoteToAdmin}>
+                      <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="groupSlug" value={group.slug} />
+                      <input type="hidden" name="memberId" value={m.memberId} />
+                      <button
+                        type="submit"
                         title="Hacer Administrador"
-                        className="text-xs text-pitch-600 hover:text-pitch-700 font-semibold px-2 py-1 rounded bg-pitch-50 dark:bg-zinc-800"
+                        className="text-[11px] text-pitch-600 hover:text-pitch-700 dark:text-pitch-400 font-semibold px-2 py-1 rounded bg-pitch-50 dark:bg-zinc-800 border border-pitch-200 dark:border-zinc-700 transition-colors"
                       >
                         Hacer admin
                       </button>
@@ -230,8 +245,10 @@ export default async function GroupAdminJugadores({
 
                   <form action={actionRemoveMember}>
                     <input type="hidden" name="groupId" value={group.id} />
+                    <input type="hidden" name="groupSlug" value={group.slug} />
                     <input type="hidden" name="memberId" value={m.memberId} />
                     <button
+                      type="submit"
                       title="Quitar del grupo"
                       className="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
                     >

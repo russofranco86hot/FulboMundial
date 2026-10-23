@@ -4,8 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { Home, Users, Trophy, TrendingUp, Settings, PlusCircle, LogIn, Layers, User } from "lucide-react";
+import { useGroupRole } from "./group-role-context";
 
-export function BottomNav() {
+interface BottomNavProps {
+  adminGroupSlugs?: string[];
+}
+
+export function BottomNav({ adminGroupSlugs = [] }: BottomNavProps) {
   const pathname = usePathname();
 
   // Detectar si estamos dentro de un grupo específico: /grupos/[groupSlug]...
@@ -17,6 +22,8 @@ export function BottomNav() {
     potentialSlug !== "unirse";
 
   const groupSlug = isInsideGroup ? potentialSlug : null;
+  const isServerAdmin = groupSlug ? adminGroupSlugs.includes(groupSlug) : false;
+  const isAdmin = useGroupRole(groupSlug, isServerAdmin);
 
   const items = isInsideGroup && groupSlug
     ? [
@@ -24,7 +31,7 @@ export function BottomNav() {
         { href: `/grupos/${groupSlug}/equipos`, label: "Equipos", icon: Users },
         { href: `/grupos/${groupSlug}/historial`, label: "Historial", icon: Trophy },
         { href: `/grupos/${groupSlug}/estadisticas`, label: "Stats", icon: TrendingUp },
-        { href: `/grupos/${groupSlug}/admin`, label: "Admin", icon: Settings },
+        ...(isAdmin ? [{ href: `/grupos/${groupSlug}/admin`, label: "Admin", icon: Settings }] : []),
       ]
     : [
         { href: "/grupos", exact: true, label: "Mis Grupos", icon: Layers },

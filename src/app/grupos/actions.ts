@@ -354,6 +354,7 @@ export async function actionRejectNameChange(formData: FormData) {
 // ─── Promover miembro a admin ─────────────────────────────────────────────
 export async function actionPromoteToAdmin(formData: FormData) {
   const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug") || "");
   await requireGroupAdmin(groupId);
 
   const memberId = Number(formData.get("memberId"));
@@ -362,6 +363,29 @@ export async function actionPromoteToAdmin(formData: FormData) {
     .set({ role: "admin" })
     .where(eq(groupMembers.id, memberId));
 
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}`);
+    revalidatePath(`/grupos/${groupSlug}/admin/jugadores`);
+  }
+  revalidatePath(`/grupos`);
+}
+
+// ─── Quitar rol de admin a un miembro ─────────────────────────────────────
+export async function actionDemoteAdmin(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug") || "");
+  await requireGroupAdmin(groupId);
+
+  const memberId = Number(formData.get("memberId"));
+  await db
+    .update(groupMembers)
+    .set({ role: "member" })
+    .where(eq(groupMembers.id, memberId));
+
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}`);
+    revalidatePath(`/grupos/${groupSlug}/admin/jugadores`);
+  }
   revalidatePath(`/grupos`);
 }
 

@@ -3,6 +3,7 @@ import { getGroupBySlug } from "@/lib/groups";
 import { getCurrentPlayer, getPlayerGroupRole } from "@/lib/session";
 import { getSessionUser } from "@/lib/session";
 import GroupNav from "./group-nav";
+import { GroupRoleSync } from "@/components/group-role-context";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,7 @@ export default async function GroupLayout({
 
   return (
     <div className="space-y-4">
+      <GroupRoleSync slug={group.slug} role={role} />
       <GroupNav group={group} role={role} />
       {children}
     </div>
