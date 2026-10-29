@@ -5,6 +5,7 @@ import { getGroupBySlug } from "@/lib/groups";
 import { formatArt } from "@/lib/time";
 import { notFound } from "next/navigation";
 import { MatchDetailClient } from "./client-page";
+import { AIChronicleCard } from "@/components/ai-chronicle-card";
 import Link from "next/link";
 import { ArrowLeft, Edit3 } from "lucide-react";
 
@@ -111,12 +112,29 @@ export default async function GroupMatchDetailPage({
           </div>
         </div>
 
-        {match.notes && (
-          <div className="text-sm italic text-pitch-900/80 dark:text-zinc-300 p-4 bg-pitch-100/50 dark:bg-zinc-800/80 rounded-xl mt-4 border-l-4 border-pitch-400">
-            <span className="font-bold not-italic block mb-1">Nota oficial:</span>
-            {match.notes}
-          </div>
-        )}
+        {/* Crónica Oficial y Audio Bot del Partido */}
+        <div className="pt-2">
+          <AIChronicleCard
+            initialChronicle={match.notes ?? undefined}
+            inputData={{
+              matchDate: match.matchDate,
+              teamAName,
+              scoreA: match.scoreA ?? 0,
+              teamBName,
+              scoreB: match.scoreB ?? 0,
+              playersA: teamA.map((t) => t.name),
+              playersB: teamB.map((t) => t.name),
+              scorers: matchGoals.map((g) => ({
+                name: g.name,
+                goals: g.goals,
+                assists: g.assists,
+                team: teamA.some((t) => t.playerId === g.playerId) ? "A" : "B",
+              })),
+              customNotes: match.notes ?? "",
+              groupName: group.name,
+            }}
+          />
+        </div>
       </div>
 
       {/* Goles y asistencias del partido */}

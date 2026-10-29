@@ -6,6 +6,7 @@ import { desc, eq } from "drizzle-orm";
 import { formatArt } from "@/lib/time";
 import { adminGroupSaveResult } from "../actions";
 import { TeamEditor, type TeamRow } from "@/components/team-editor";
+import { NotesWithAI } from "./notes-with-ai";
 import { CheckCircle, Info, Calendar, ArrowRightLeft, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -333,16 +334,39 @@ export default async function GroupAdminResultado({
           </div>
         )}
         
-        <div className="space-y-1">
-          <label className="text-sm font-bold text-pitch-800 dark:text-zinc-300 ml-1">Notas del partido</label>
-          <textarea
-            name="notes"
-            placeholder="Ej: Gran partido, golazo de afuera..."
-            defaultValue={existing?.notes ?? ""}
-            className="input bg-zinc-50 dark:bg-zinc-800/50"
-            rows={3}
-          />
-        </div>
+        {/* Crónica con IA, Bot de Audio y Notas Oficiales */}
+        <NotesWithAI
+          initialNotes={existing?.notes ?? ""}
+          inputData={{
+            matchDate: match.matchDate,
+            teamAName,
+            scoreA: existing?.scoreA ?? 0,
+            teamBName,
+            scoreB: existing?.scoreB ?? 0,
+            playersA: teamA.map((t) => t.name),
+            playersB: teamB.map((t) => t.name),
+            scorers: [
+              ...teamA
+                .filter((t) => t.playerId && (goalsMap.get(t.playerId)?.goals ?? 0) > 0)
+                .map((t) => ({
+                  name: t.name,
+                  goals: goalsMap.get(t.playerId!)?.goals ?? 0,
+                  assists: goalsMap.get(t.playerId!)?.assists ?? 0,
+                  team: "A" as const,
+                })),
+              ...teamB
+                .filter((t) => t.playerId && (goalsMap.get(t.playerId)?.goals ?? 0) > 0)
+                .map((t) => ({
+                  name: t.name,
+                  goals: goalsMap.get(t.playerId!)?.goals ?? 0,
+                  assists: goalsMap.get(t.playerId!)?.assists ?? 0,
+                  team: "B" as const,
+                })),
+            ],
+            customNotes: existing?.notes ?? "",
+            groupName: group.name,
+          }}
+        />
         
         <button className="btn-primary w-full py-3 text-lg font-bold shadow-glow-green">
           {isFinished ? "Guardar cambios de resultado y actualizar histórico" : "Guardar resultado y cerrar partido"}

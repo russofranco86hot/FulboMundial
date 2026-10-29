@@ -10,6 +10,34 @@ export type PairStat = {
   winPct: number;
 };
 
+export type ToxicPairStat = {
+  player1: string;
+  player2: string;
+  matches: number;
+  losses: number;
+  lossPct: number;
+};
+
+export type PlayerLuckStat = {
+  playerId: number;
+  name: string;
+  matches: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winPct: number;
+  lossPct: number;
+};
+
+export type RivalryStat = {
+  player1: string;
+  player2: string;
+  matches: number;
+  wins1: number;
+  wins2: number;
+  draws: number;
+};
+
 export type MatchupStat = {
   winner: string;
   loser: string;
@@ -71,6 +99,7 @@ export async function getAdvancedStats(groupId?: number) {
 
   const chemistry: Record<string, { matches: number, wins: number, p1: string, p2: string }> = {};
   const paternity: Record<string, { matches: number, wins: number, p1: string, p2: string }> = {};
+  const rivalPairs: Record<string, { p1: string; p2: string; matches: number; wins1: number; wins2: number; draws: number }> = {};
   const playerHistory: Record<number, { name: string, results: ("W"|"L"|"D")[], last5Count: number }> = {};
 
   for (const m of allMatches) {
@@ -114,6 +143,30 @@ export async function getAdvancedStats(groupId?: number) {
         if (!paternity[keyB]) paternity[keyB] = { matches: 0, wins: 0, p1: pB.name, p2: pA.name };
         paternity[keyB].matches++;
         if (teamBWon) paternity[keyB].wins++;
+
+        // Duelos cara a cara (El Clásico)
+        const isAFirst = pA.id < pB.id;
+        const rKey = isAFirst ? `${pA.id}-${pB.id}` : `${pB.id}-${pA.id}`;
+        if (!rivalPairs[rKey]) {
+          rivalPairs[rKey] = {
+            p1: isAFirst ? pA.name : pB.name,
+            p2: isAFirst ? pB.name : pA.name,
+            matches: 0,
+            wins1: 0,
+            wins2: 0,
+            draws: 0,
+          };
+        }
+        rivalPairs[rKey].matches++;
+        if (isDraw) {
+          rivalPairs[rKey].draws++;
+        } else if (teamAWon) {
+          if (isAFirst) rivalPairs[rKey].wins1++;
+          else rivalPairs[rKey].wins2++;
+        } else if (teamBWon) {
+          if (isAFirst) rivalPairs[rKey].wins2++;
+          else rivalPairs[rKey].wins1++;
+        }
       }
     }
   }
@@ -159,12 +212,32 @@ export async function getAdvancedStats(groupId?: number) {
     .slice(0, 10);
 
   const streaks: StreakStat[] = [];
+  const playerStatsList: PlayerLuckStat[] = [];
+
   for (const [id, data] of Object.entries(playerHistory)) {
     // Filtrar inactivos
     if (activePlayerIds && !activePlayerIds.has(Number(id))) continue;
 
     const res = data.results;
     if (res.length === 0) continue;
+
+    const totalP = res.length;
+    const wins = res.filter((r) => r === "W").length;
+    const losses = res.filter((r) => r === "L").length;
+    const draws = res.filter((r) => r === "D").length;
+
+    if (totalP >= 3) {
+      playerStatsList.push({
+        playerId: Number(id),
+        name: data.name,
+        matches: totalP,
+        wins,
+        losses,
+        draws,
+        winPct: Math.round((wins / totalP) * 100),
+        lossPct: Math.round((losses / totalP) * 100),
+      });
+    }
 
     let winStreak = 0;
     for (const r of res) { if (r === "W") winStreak++; else break; }
@@ -175,9 +248,68 @@ export async function getAdvancedStats(groupId?: number) {
     if (winlessStreak >= 4) streaks.push({ playerId: Number(id), name: data.name, type: "winless", count: winlessStreak });
   }
 
+  // 1. Amuleto / Talismán: Los que más ganan cuando están en cancha
+  const talismans = [...playerStatsList]
+    .sort((a, b) => b.winPct - a.winPct || b.wins - a.wins || b.matches - a.matches)
+    .slice(0, 6);
+
+  // 2. La Mufa / El Salado: Los que más pierden cuando están en cancha (con humor)
+  const mufas = [...playerStatsList]
+    .sort((a, b) => b.lossPct - a.lossPct || b.losses - a.losses || b.matches - a.matches)
+    .slice(0, 6);
+
+  // 3. Dúo Tóxico (Anti-Química): Parejas que cuando juegan juntas pierden casi siempre
+  const toxicDuos: ToxicPairStat[] = Object.entries(chemistry)
+    .filter(([key, c]) => {
+      if (c.matches < 3) return false;
+      if (activePlayerIds) {
+        const [id1, id2] = key.split("-").map(Number);
+        if (!activePlayerIds.has(id1) || !activePlayerIds.has(id2)) return false;
+      }
+      const losses = c.matches - c.wins;
+      return (losses / c.matches) >= 0.55;
+    })
+    .map(([, c]) => {
+      const losses = c.matches - c.wins;
+      return {
+        player1: c.p1,
+        player2: c.p2,
+        matches: c.matches,
+        losses,
+        lossPct: Math.round((losses / c.matches) * 100),
+      };
+    })
+    .sort((a, b) => b.lossPct - a.lossPct || b.matches - a.matches)
+    .slice(0, 6);
+
+  // 4. El Clásico Picante: Parejas con más partidos como rivales directos
+  const classicRivals: RivalryStat[] = Object.entries(rivalPairs)
+    .filter(([key, r]) => {
+      if (r.matches < 3) return false;
+      if (activePlayerIds) {
+        const [id1, id2] = key.split("-").map(Number);
+        if (!activePlayerIds.has(id1) || !activePlayerIds.has(id2)) return false;
+      }
+      return true;
+    })
+    .map(([, r]) => ({
+      player1: r.p1,
+      player2: r.p2,
+      matches: r.matches,
+      wins1: r.wins1,
+      wins2: r.wins2,
+      draws: r.draws,
+    }))
+    .sort((a, b) => b.matches - a.matches)
+    .slice(0, 6);
+
   return {
     topChemistry,
     topPaternity,
-    streaks: streaks.sort((a, b) => b.count - a.count)
+    streaks: streaks.sort((a, b) => b.count - a.count),
+    talismans,
+    mufas,
+    toxicDuos,
+    classicRivals,
   };
 }

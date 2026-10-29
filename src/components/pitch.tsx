@@ -36,7 +36,7 @@ function computeTacticalLayout(players: PitchPlayer[]): {
     return { placements, formationSummary: "Sin jugadores" };
   }
 
-  // 1. Identificar arqueros
+  // 1. Identificar arqueros (SÓLO si está marcado explícitamente como arquero)
   const keepers: PitchPlayer[] = [];
   const outfield: PitchPlayer[] = [];
 
@@ -49,12 +49,9 @@ function computeTacticalLayout(players: PitchPlayer[]): {
     }
   });
 
-  // Si no hay arquero explícito, el primero toma la portería
-  if (keepers.length === 0 && outfield.length > 0) {
-    keepers.push(outfield.shift()!);
-  }
+  // IMPORTANTE: NO forzamos a ningún jugador de campo a ser arquero si no lo es.
 
-  // Ubicar arquero(s)
+  // Ubicar arquero(s) solo si existen
   if (keepers.length === 1) {
     placements.set(keepers[0].id, {
       top: "87%",
@@ -62,7 +59,7 @@ function computeTacticalLayout(players: PitchPlayer[]): {
       role: "GK",
       roleLabel: "POR",
     });
-  } else {
+  } else if (keepers.length > 1) {
     keepers.forEach((k, i) => {
       const left =
         keepers.length === 2
@@ -108,17 +105,20 @@ function computeTacticalLayout(players: PitchPlayer[]): {
     }
   });
 
-  // Garantizar que haya al menos 1 jugador en defensa si hay de campo
+  // Garantizar que haya al menos 1 jugador en defensa si hay jugadores de campo
   if (defs.length === 0 && (mids.length > 1 || fwds.length > 1)) {
     if (mids.length > 0) defs.push(mids.shift()!);
     else if (fwds.length > 0) defs.push(fwds.shift()!);
   }
 
-  // Formación calculada: p. ej. "1-2-1-1"
-  const formationSummary = `${keepers.length}-${defs.length}-${mids.length}-${fwds.length}`.replace(
-    /-0$/,
-    ""
-  );
+  // Formación calculada: p. ej. "1-2-1-1" si hay arquero, o "2-2-1" si no hay arquero
+  const formationParts = [
+    ...(keepers.length > 0 ? [keepers.length] : []),
+    defs.length,
+    mids.length,
+    fwds.length,
+  ];
+  const formationSummary = formationParts.join("-").replace(/-0$/, "");
 
   const getHorizontalSpread = (count: number): string[] => {
     if (count <= 1) return ["50%"];
@@ -129,10 +129,15 @@ function computeTacticalLayout(players: PitchPlayer[]): {
     return Array.from({ length: count }, (_, i) => `${Math.round(((i + 1) / (count + 1)) * 100)}%`);
   };
 
+  const hasKeeper = keepers.length > 0;
+  const defTop = hasKeeper ? "67%" : "76%";
+  const midTop = hasKeeper ? "45%" : "48%";
+  const fwdTop = hasKeeper ? "21%" : "23%";
+
   const defSpreads = getHorizontalSpread(defs.length);
   defs.forEach((p, i) => {
     placements.set(p.id, {
-      top: "67%",
+      top: defTop,
       left: defSpreads[i],
       role: "DEF",
       roleLabel: "DEF",
@@ -142,7 +147,7 @@ function computeTacticalLayout(players: PitchPlayer[]): {
   const midSpreads = getHorizontalSpread(mids.length);
   mids.forEach((p, i) => {
     placements.set(p.id, {
-      top: "45%",
+      top: midTop,
       left: midSpreads[i],
       role: "MED",
       roleLabel: "MED",
@@ -152,7 +157,7 @@ function computeTacticalLayout(players: PitchPlayer[]): {
   const fwdSpreads = getHorizontalSpread(fwds.length);
   fwds.forEach((p, i) => {
     placements.set(p.id, {
-      top: "21%",
+      top: fwdTop,
       left: fwdSpreads[i],
       role: "DEL",
       roleLabel: "DEL",
@@ -443,7 +448,8 @@ export function Pitch({
             roleLabel: "MED",
           };
 
-          const isKeeper = placement.role === "GK";
+          const rawPos = (p.preferredPosition || "").toUpperCase();
+          const isKeeper = p.isGoalkeeper || rawPos === "GK" || rawPos === "POR" || rawPos === "ARQ";
 
           // Colores de badges de posición inspirados en EA FC Ultimate Team
           const badgeStyle = isKeeper

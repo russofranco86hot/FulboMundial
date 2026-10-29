@@ -183,9 +183,18 @@ export default async function GroupHomePage({
             </div>
           )}
           {currentResult?.notes && (
-            <div className="p-3.5 bg-pitch-100/60 dark:bg-zinc-800/80 rounded-xl border-l-4 border-pitch-500 text-xs italic text-pitch-900/90 dark:text-zinc-300">
-              <span className="font-bold not-italic block text-pitch-700 dark:text-pitch-400 mb-1">Crónica oficial:</span>
-              "{currentResult.notes}"
+            <div className="p-4 bg-gradient-to-r from-emerald-950/30 via-zinc-900/40 to-pitch-950/30 rounded-2xl border border-emerald-500/30 text-xs text-pitch-900/90 dark:text-zinc-200 space-y-1.5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-[11px] text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🎙️</span> Crónica Oficial & Relato
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                  Audio disponible
+                </span>
+              </div>
+              <p className="italic text-zinc-700 dark:text-zinc-300 line-clamp-3">
+                "{currentResult.notes}"
+              </p>
             </div>
           )}
           <Link

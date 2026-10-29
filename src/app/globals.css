@@ -121,6 +121,19 @@ body::selection {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   }
 
+  .card-epic {
+    @apply relative overflow-hidden rounded-3xl p-6 transition-all duration-300 border-2 border-emerald-500/30;
+    background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.08) 0%, rgba(255, 255, 255, 0.8) 75%);
+    backdrop-filter: blur(24px) saturate(2);
+    -webkit-backdrop-filter: blur(24px) saturate(2);
+    box-shadow: 0 8px 32px rgba(16, 185, 129, 0.12);
+  }
+  .dark .card-epic {
+    background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.12) 0%, rgba(10, 10, 12, 0.95) 75%);
+    border-color: rgba(16, 185, 129, 0.35);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  }
+
   /* ── Chips / Badges ──────────────────────────────────────────── */
   .chip {
     @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
