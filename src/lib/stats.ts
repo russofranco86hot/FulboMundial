@@ -248,17 +248,27 @@ export async function getAdvancedStats(groupId?: number) {
     if (winlessStreak >= 4) streaks.push({ playerId: Number(id), name: data.name, type: "winless", count: winlessStreak });
   }
 
-  // 1. Amuleto / Talismán: Los que más ganan cuando están en cancha
-  const talismans = [...playerStatsList]
+  // 1. Amuleto / Talismán: Los que más ganan cuando están en cancha (requiere al menos 1 victoria y >= 50% de efectividad)
+  const talismansCandidates = playerStatsList.filter((p) => p.wins > 0 && p.winPct >= 50);
+  const talismans = (
+    talismansCandidates.length > 0
+      ? talismansCandidates
+      : playerStatsList.filter((p) => p.wins > 0 && p.winPct > 0)
+  )
     .sort((a, b) => b.winPct - a.winPct || b.wins - a.wins || b.matches - a.matches)
     .slice(0, 6);
 
-  // 2. La Mufa / El Salado: Los que más pierden cuando están en cancha (con humor)
-  const mufas = [...playerStatsList]
+  // 2. La Mufa / El Salado: Los que más pierden cuando están en cancha (requiere al menos 1 derrota y >= 50% de caídas)
+  const mufasCandidates = playerStatsList.filter((p) => p.losses > 0 && p.lossPct >= 50);
+  const mufas = (
+    mufasCandidates.length > 0
+      ? mufasCandidates
+      : playerStatsList.filter((p) => p.losses > 0 && p.lossPct > 0)
+  )
     .sort((a, b) => b.lossPct - a.lossPct || b.losses - a.losses || b.matches - a.matches)
     .slice(0, 6);
 
-  // 3. Dúo Tóxico (Anti-Química): Parejas que cuando juegan juntas pierden casi siempre
+  // 3. Dúo Tóxico (Anti-Química): Parejas que cuando juegan juntas pierden al menos el 50% y tienen derrotas
   const toxicDuos: ToxicPairStat[] = Object.entries(chemistry)
     .filter(([key, c]) => {
       if (c.matches < 3) return false;
@@ -267,7 +277,7 @@ export async function getAdvancedStats(groupId?: number) {
         if (!activePlayerIds.has(id1) || !activePlayerIds.has(id2)) return false;
       }
       const losses = c.matches - c.wins;
-      return (losses / c.matches) >= 0.55;
+      return losses > 0 && (losses / c.matches) >= 0.5;
     })
     .map(([, c]) => {
       const losses = c.matches - c.wins;

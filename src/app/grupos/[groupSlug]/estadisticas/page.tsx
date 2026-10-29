@@ -59,7 +59,7 @@ export default async function GroupEstadisticasPage({
           </div>
 
           {stats.talismans.length === 0 ? (
-            <p className="text-xs text-zinc-400 py-2">Sin datos suficientes aún.</p>
+            <p className="text-xs text-zinc-400 py-2">Sin jugadores con victorias suficientes aún.</p>
           ) : (
             <ul className="space-y-2">
               {stats.talismans.map((t, idx) => (
@@ -102,7 +102,7 @@ export default async function GroupEstadisticasPage({
           </div>
 
           {stats.mufas.length === 0 ? (
-            <p className="text-xs text-zinc-400 py-2">Sin datos suficientes aún.</p>
+            <p className="text-xs text-zinc-400 py-2">¡Nadie califica como mufa! No hay jugadores con derrotas marcadas.</p>
           ) : (
             <ul className="space-y-2">
               {stats.mufas.map((m, idx) => (
