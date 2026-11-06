@@ -2,6 +2,7 @@ import { getGroupBySlug } from "@/lib/groups";
 import { adminGroupSaveSettings } from "../actions";
 import { CheckCircle2, Settings, Trophy, Calendar, Users } from "lucide-react";
 import { notFound } from "next/navigation";
+import { ProCard } from "@/components/pro-card";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,8 @@ export default async function GroupAdminConfigPage({
 
   return (
     <div className="space-y-5 animate-fade-in">
+      <ProCard groupName={group.name} />
+
       {saved === "1" && (
         <div className="rounded-2xl bg-green-500/15 p-4 text-sm font-semibold text-green-800 dark:text-green-300 border border-green-500/30 flex items-center gap-3 shadow-glow-green">
           <CheckCircle2 className="text-green-600 dark:text-green-400 shrink-0" size={24} />
