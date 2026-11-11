@@ -4,8 +4,170 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getSessionUser, getCurrentPlayer, requireGroupAdmin, getPlayerGroupRole } from "@/lib/session";
 import { createGroup } from "@/lib/groups";
-import { db, groupMembers, joinRequests, nameChangeRequests, players } from "@/db";
-import { and, eq } from "drizzle-orm";
+import { db, groupMembers, joinRequests, nameChangeRequests, players, type Group, type Player } from "@/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { pushToGroupAdmins, pushToPlayer } from "@/lib/push";
+import {
+  sendEmail,
+  renderJoinRequestAdminEmail,
+  renderJoinApprovedEmail,
+  renderJoinRejectedEmail,
+} from "@/lib/email";
+
+function getBaseAppUrl(): string {
+  return (process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "https://fulbomundial.com.ar").replace(/\/$/, "");
+}
+
+/**
+ * Notifica a los administradores del grupo cuando alguien solicita unirse por código.
+ * Envía Push y/o Email según la preferencia configurada en el grupo ('both' | 'email' | 'push' | 'none').
+ */
+async function notifyAdminsOfJoinRequest(group: Group, requestingPlayer: Player, message?: string | null) {
+  const pref = (group as any).adminNotifyPreference || "both";
+  if (pref === "none") return;
+
+  const appUrl = getBaseAppUrl();
+
+  // 1. Notificación Push a los admins
+  if (pref === "both" || pref === "push") {
+    try {
+      await pushToGroupAdmins(group.id, {
+        title: `⚽ ¡Nueva solicitud en ${group.name}!`,
+        body: `${requestingPlayer.name} ingresó el código para sumarse al plantel. ¡Revisá la solicitud!`,
+        url: `/grupos/${group.slug}/admin/solicitudes`,
+        tag: `join-request-${group.id}`,
+      });
+    } catch (err) {
+      console.warn("[notifyAdminsOfJoinRequest:push] Error:", err);
+    }
+  }
+
+  // 2. Notificación por Email a los admins
+  if (pref === "both" || pref === "email") {
+    try {
+      // Obtener emails de todos los admins del grupo
+      const adminMembers = await db
+        .select({
+          name: players.name,
+          email: players.email,
+        })
+        .from(groupMembers)
+        .innerJoin(players, eq(players.id, groupMembers.playerId))
+        .where(
+          and(
+            eq(groupMembers.groupId, group.id),
+            eq(groupMembers.status, "active"),
+            eq(groupMembers.role, "admin")
+          )
+        );
+
+      const adminEmails = adminMembers
+        .map((a) => a.email)
+        .filter((e): e is string => Boolean(e && e.includes("@")));
+
+      if (adminEmails.length > 0) {
+        const adminName = adminMembers[0]?.name || "Admin";
+        const emailTemplate = renderJoinRequestAdminEmail({
+          groupName: group.name,
+          groupSlug: group.slug,
+          adminName,
+          playerName: requestingPlayer.name,
+          playerEmail: requestingPlayer.email || "Sin correo registrado",
+          message,
+          appUrl,
+        });
+
+        await sendEmail({
+          to: adminEmails,
+          subject: emailTemplate.subject,
+          html: emailTemplate.html,
+          text: emailTemplate.text,
+        });
+      }
+    } catch (err) {
+      console.warn("[notifyAdminsOfJoinRequest:email] Error:", err);
+    }
+  }
+}
+
+/**
+ * Notifica al jugador cuando su solicitud de unión fue aprobada.
+ */
+async function notifyPlayerOfJoinApproval(group: Group, player: Player) {
+  const appUrl = getBaseAppUrl();
+
+  // 1. Notificación Push directa al jugador
+  try {
+    await pushToPlayer(player.id, {
+      title: `🟢 ¡Fichaje aprobado en ${group.name}! ⚽`,
+      body: `¡El DT te aceptó en el plantel! Ya podés anotarte al próximo partido.`,
+      url: `/grupos/${group.slug}`,
+      tag: `join-approved-${group.id}`,
+    });
+  } catch (e) {
+    console.warn("[notifyPlayerOfJoinApproval:push] Error:", e);
+  }
+
+  // 2. Correo épico de bienvenida
+  if (player.email && player.email.includes("@")) {
+    try {
+      const emailTemplate = renderJoinApprovedEmail({
+        groupName: group.name,
+        groupSlug: group.slug,
+        playerName: player.name,
+        appUrl,
+      });
+
+      await sendEmail({
+        to: player.email,
+        subject: emailTemplate.subject,
+        html: emailTemplate.html,
+        text: emailTemplate.text,
+      });
+    } catch (e) {
+      console.warn("[notifyPlayerOfJoinApproval:email] Error:", e);
+    }
+  }
+}
+
+/**
+ * Notifica al jugador cuando su solicitud de unión fue rechazada.
+ */
+async function notifyPlayerOfJoinRejection(group: Group, player: Player) {
+  const appUrl = getBaseAppUrl();
+
+  // 1. Notificación Push directa
+  try {
+    await pushToPlayer(player.id, {
+      title: `⚠️ Solicitud en ${group.name}`,
+      body: `El administrador no pudo darte lugar en el grupo en esta oportunidad.`,
+      url: `/grupos`,
+      tag: `join-rejected-${group.id}`,
+    });
+  } catch (e) {
+    console.warn("[notifyPlayerOfJoinRejection:push] Error:", e);
+  }
+
+  // 2. Correo futbolístico de rechazo
+  if (player.email && player.email.includes("@")) {
+    try {
+      const emailTemplate = renderJoinRejectedEmail({
+        groupName: group.name,
+        playerName: player.name,
+        appUrl,
+      });
+
+      await sendEmail({
+        to: player.email,
+        subject: emailTemplate.subject,
+        html: emailTemplate.html,
+        text: emailTemplate.text,
+      });
+    } catch (e) {
+      console.warn("[notifyPlayerOfJoinRejection:email] Error:", e);
+    }
+  }
+}
 
 // ─── Crear grupo ──────────────────────────────────────────────────────────
 export async function actionCreateGroup(formData: FormData) {
@@ -95,6 +257,11 @@ export async function actionRequestJoin(formData: FormData) {
                   })
                   .where(eq(joinRequests.id, existingReq.id));
                 redirectUrl = `/grupos/unirse/pendiente?grupo=${group.slug}&nombre=${encodeURIComponent(group.name)}`;
+
+                // Notificar al admin sobre la nueva solicitud
+                notifyAdminsOfJoinRequest(group, player, message).catch((e) =>
+                  console.error("[notifyAdminsOfJoinRequest] Error:", e)
+                );
               }
             } else {
               await db.insert(joinRequests).values({
@@ -104,6 +271,11 @@ export async function actionRequestJoin(formData: FormData) {
                 status: "pending",
               });
               redirectUrl = `/grupos/unirse/pendiente?grupo=${group.slug}&nombre=${encodeURIComponent(group.name)}`;
+
+              // Notificar al admin sobre la nueva solicitud
+              notifyAdminsOfJoinRequest(group, player, message).catch((e) =>
+                console.error("[notifyAdminsOfJoinRequest] Error:", e)
+              );
             }
           }
         }
@@ -132,6 +304,8 @@ export async function actionApproveRequest(formData: FormData) {
     : null;
 
   const resolver = await getCurrentPlayer();
+  const { groups } = await import("@/db/schema");
+  const group = (await db.select().from(groups).where(eq(groups.id, groupId)).limit(1))[0];
 
   if (linkToPlayerId && linkToPlayerId !== requestingPlayerId) {
     // ─── VINCULAR A JUGADOR EXISTENTE CON HISTORIAL ───
@@ -217,6 +391,13 @@ export async function actionApproveRequest(formData: FormData) {
         })
         .where(eq(joinRequests.id, requestId));
 
+      // Notificar al jugador sobre la aprobación
+      if (group) {
+        notifyPlayerOfJoinApproval(group, targetPlayer).catch((e) =>
+          console.error("[notifyPlayerOfJoinApproval:link] Error:", e)
+        );
+      }
+
       // 6. Limpiar el registro duplicado requestingPlayer
       try {
         await db.delete(groupMembers).where(eq(groupMembers.playerId, requestingPlayerId));
@@ -252,6 +433,18 @@ export async function actionApproveRequest(formData: FormData) {
         status: "active",
       });
     }
+
+    // Notificar al jugador sobre la aprobación
+    if (group) {
+      const playerRow = (
+        await db.select().from(players).where(eq(players.id, requestingPlayerId)).limit(1)
+      )[0];
+      if (playerRow) {
+        notifyPlayerOfJoinApproval(group, playerRow).catch((e) =>
+          console.error("[notifyPlayerOfJoinApproval:normal] Error:", e)
+        );
+      }
+    }
   }
 
   if (groupSlug) {
@@ -271,11 +464,35 @@ export async function actionRejectRequest(formData: FormData) {
 
   const requestId = Number(formData.get("requestId"));
   const resolver = await getCurrentPlayer();
+  const { groups } = await import("@/db/schema");
+  const group = (await db.select().from(groups).where(eq(groups.id, groupId)).limit(1))[0];
+
+  // Obtener jugador que solicitó antes de rechazar
+  const reqRow = (
+    await db
+      .select({
+        playerId: joinRequests.playerId,
+      })
+      .from(joinRequests)
+      .where(eq(joinRequests.id, requestId))
+      .limit(1)
+  )[0];
 
   await db
     .update(joinRequests)
     .set({ status: "rejected", resolvedAt: new Date(), resolvedBy: resolver?.id })
     .where(eq(joinRequests.id, requestId));
+
+  if (group && reqRow?.playerId) {
+    const playerRow = (
+      await db.select().from(players).where(eq(players.id, reqRow.playerId)).limit(1)
+    )[0];
+    if (playerRow) {
+      notifyPlayerOfJoinRejection(group, playerRow).catch((e) =>
+        console.error("[notifyPlayerOfJoinRejection] Error:", e)
+      );
+    }
+  }
 
   if (groupSlug) {
     revalidatePath(`/grupos/${groupSlug}/admin/solicitudes`);

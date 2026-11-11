@@ -1,7 +1,7 @@
 import { getGroupBySlug } from "@/lib/groups";
 import { isGroupPro } from "@/lib/billing";
 import { adminGroupSaveSettings } from "../actions";
-import { CheckCircle2, Settings, Trophy, Calendar, Users } from "lucide-react";
+import { CheckCircle2, Settings, Trophy, Calendar, Users, Bell } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ProCard } from "@/components/pro-card";
 
@@ -258,6 +258,41 @@ export default async function GroupAdminConfigPage({
                 Bando rival B (habitualmente camisetas oscuras / sin pechera)
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* ─── Notificaciones del Administrador ─── */}
+        <div className="card space-y-4 border-pitch-200/80 dark:border-zinc-800">
+          <div className="flex items-center gap-2 border-b border-pitch-100/60 dark:border-zinc-800 pb-2">
+            <Bell size={20} className="text-pitch-600 dark:text-pitch-400" />
+            <h2 className="font-bold text-pitch-800 dark:text-zinc-100">
+              Notificaciones para el Administrador
+            </h2>
+          </div>
+
+          <p className="text-xs text-pitch-900/60 dark:text-zinc-400">
+            Elegí cómo querés que te avisemos cuando un jugador solicita unirse al grupo mediante tu código de invitación.
+          </p>
+
+          <div>
+            <label className="block text-xs font-semibold mb-1.5 text-pitch-900/70 dark:text-zinc-300">
+              Canal de notificación preferido
+            </label>
+            <select
+              name="adminNotifyPreference"
+              defaultValue={(group as any).adminNotifyPreference ?? "both"}
+              className="input w-full font-medium"
+            >
+              <option value="both">🔔 Notificación Push en el celular + ✉️ Correo electrónico (Recomendado)</option>
+              <option value="push">🔔 Solo Notificación Push (en el navegador o celular)</option>
+              <option value="email">✉️ Solo Correo electrónico</option>
+              <option value="none">🔕 Desactivadas (solo revisar manualmente en el panel)</option>
+            </select>
+          </div>
+
+          <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl text-[11px] text-zinc-500 dark:text-zinc-400 space-y-1 border border-zinc-200/60 dark:border-zinc-700/60">
+            <p>💡 <strong>Al aceptar o rechazar:</strong></p>
+            <p>El jugador que solicitó unirse recibirá siempre un correo con estilo épico y futbolístico confirmando si ya tiene la camiseta puesta o la decisión del cuerpo técnico.</p>
           </div>
         </div>
 

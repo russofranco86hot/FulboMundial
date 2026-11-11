@@ -535,6 +535,7 @@ export async function adminGroupSaveSettings(formData: FormData) {
   const ptsLoss = Number(formData.get("ptsLoss") ?? 1);
   const teamAName = String(formData.get("teamAName") || "Claro").trim();
   const teamBName = String(formData.get("teamBName") || "Oscuro").trim();
+  const adminNotifyPreference = String(formData.get("adminNotifyPreference") || "both").trim();
 
   await db
     .update(groups)
@@ -549,6 +550,7 @@ export async function adminGroupSaveSettings(formData: FormData) {
       ptsLoss,
       teamAName,
       teamBName,
+      adminNotifyPreference,
     })
     .where(eq(groups.id, groupId));
 

@@ -68,6 +68,8 @@ export const groups = pgTable(
     ptsLoss: integer("pts_loss").notNull().default(1),
     teamAName: text("team_a_name").notNull().default("Claro"),
     teamBName: text("team_b_name").notNull().default("Oscuro"),
+    // Preferencias de notificaciones de administración
+    adminNotifyPreference: text("admin_notify_preference").notNull().default("both"), // 'both' | 'email' | 'push' | 'none'
     // Monetización / Plan PRO (Freemium B2C)
     isPro: boolean("is_pro").notNull().default(false),
     proPlan: text("pro_plan"), // 'pro_monthly' | 'pro_annual' | 'pro_lifetime'

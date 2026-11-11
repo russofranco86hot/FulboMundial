@@ -240,6 +240,7 @@ export const getPlayerGroups = cache(
           ptsLoss: groups.ptsLoss,
           teamAName: groups.teamAName,
           teamBName: groups.teamBName,
+          adminNotifyPreference: groups.adminNotifyPreference,
           isPro: groups.isPro,
           proPlan: groups.proPlan,
           proExpiresAt: groups.proExpiresAt,

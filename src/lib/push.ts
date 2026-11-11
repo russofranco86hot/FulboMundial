@@ -70,6 +70,31 @@ export async function pushToPlayer(playerId: number, payload: PushPayload) {
   return deliver(subs, payload);
 }
 
+/** Notifica a los administradores activos de un grupo. */
+export async function pushToGroupAdmins(groupId: number, payload: PushPayload) {
+  const admins = await db
+    .select({ playerId: groupMembers.playerId })
+    .from(groupMembers)
+    .where(
+      and(
+        eq(groupMembers.groupId, groupId),
+        eq(groupMembers.status, "active"),
+        eq(groupMembers.role, "admin")
+      )
+    );
+
+  const playerIds = admins.map((m) => m.playerId).filter(Boolean);
+  if (playerIds.length === 0) return { sent: 0, removed: 0 };
+
+  const subs = await db
+    .select()
+    .from(pushSubscriptions)
+    .where(inArray(pushSubscriptions.playerId, playerIds));
+
+  if (subs.length === 0) return { sent: 0, removed: 0 };
+  return deliver(subs, payload);
+}
+
 /** Notifica a todos los miembros activos de un grupo (con fallback a pushToAll si no hay playerIds asociados). */
 export async function pushToGroupMembers(groupId: number, payload: PushPayload) {
   const members = await db

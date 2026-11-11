@@ -38,6 +38,7 @@ async function runMigrationsOnce(): Promise<void> {
     await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS mp_preapproval_id TEXT;`);
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS team_a_name TEXT;`);
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS team_b_name TEXT;`);
+    await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS admin_notify_preference TEXT NOT NULL DEFAULT 'both';`);
   } catch (err) {
     console.error("Error running DB upgrades:", err);
   }
