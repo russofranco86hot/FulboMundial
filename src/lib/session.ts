@@ -1,7 +1,9 @@
 import "server-only";
+import { cache } from "react";
 import { auth } from "@/auth";
 import { db, players, groupMembers, groups, type Player, type Group } from "@/db";
 import { eq, or, and, sql } from "drizzle-orm";
+import { ensureDbUpgrades } from "@/lib/db-migrations";
 
 export type SessionUser = {
   name?: string | null;
@@ -10,86 +12,100 @@ export type SessionUser = {
   googleId?: string;
 };
 
-export async function getSessionUser(): Promise<SessionUser | null> {
-  const session = await auth();
-  if (!session?.user) return null;
-  return session.user as SessionUser;
-}
-
-import { ensureDbUpgrades } from "@/lib/db-migrations";
+export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
+  try {
+    const session = await auth();
+    if (!session?.user) return null;
+    return session.user as SessionUser;
+  } catch (err) {
+    if (err && typeof err === "object" && "digest" in err && err.digest === "DYNAMIC_SERVER_USAGE") {
+      throw err;
+    }
+    console.error("[getSessionUser] Error reading auth session:", err);
+    return null;
+  }
+});
 
 /**
  * Resuelve el `Player` vinculado al usuario logueado.
  * Busca primero por google_id; si no, por email (insensible a mayúsculas/minúsculas).
  * Si coincide por email y no tenía googleId guardado, lo vincula automáticamente.
  */
-export async function getCurrentPlayer(): Promise<Player | null> {
-  await ensureDbUpgrades();
-  const user = await getSessionUser();
-  if (!user) return null;
-
-  const conds = [];
-  if (user.googleId) conds.push(eq(players.googleId, user.googleId));
-  if (user.email) conds.push(sql`lower(${players.email}) = ${user.email.toLowerCase().trim()}`);
-  if (conds.length === 0) return null;
-
-  let rows: Player[] = [];
+export const getCurrentPlayer = cache(async (): Promise<Player | null> => {
   try {
-    rows = await db
-      .select()
-      .from(players)
-      .where(conds.length === 1 ? conds[0] : or(...conds))
-      .limit(1);
-  } catch (err) {
-    console.warn("Could not query players with all columns, forcing migrations:", err);
     await ensureDbUpgrades();
-    rows = await db
-      .select()
-      .from(players)
-      .where(conds.length === 1 ? conds[0] : or(...conds))
-      .limit(1);
-  }
+    const user = await getSessionUser();
+    if (!user) return null;
 
-  let player = rows[0] ?? null;
+    const conds = [];
+    if (user.googleId) conds.push(eq(players.googleId, user.googleId));
+    if (user.email) conds.push(sql`lower(${players.email}) = ${user.email.toLowerCase().trim()}`);
+    if (conds.length === 0) return null;
 
-  // Si el usuario está autenticado pero aún no tiene fila en players, la creamos automáticamente
-  if (!player && (user.email || user.googleId)) {
+    let rows: Player[] = [];
     try {
-      const defaultName =
-        user.name?.trim() || (user.email ? user.email.split("@")[0] : "Jugador");
-      const inserted = await db
-        .insert(players)
-        .values({
-          name: defaultName,
-          email: user.email ? user.email.toLowerCase().trim() : null,
-          googleId: user.googleId || null,
-          stars: "3.0",
-          priorityOrder: 99,
-          preferredPosition: "MED",
-          preferredFoot: "R",
-        })
-        .returning();
-      if (inserted[0]) {
-        player = inserted[0];
-      }
-    } catch (e) {
-      console.error("Error auto-creando jugador para usuario autenticado:", e);
-      try {
-        const requery = await db
-          .select()
-          .from(players)
-          .where(conds.length === 1 ? conds[0] : or(...conds))
-          .limit(1);
-        player = requery[0] ?? null;
-      } catch {}
+      rows = await db
+        .select()
+        .from(players)
+        .where(conds.length === 1 ? conds[0] : or(...conds))
+        .limit(1);
+    } catch (err) {
+      console.warn("Could not query players, retrying:", err);
+      rows = await db
+        .select()
+        .from(players)
+        .where(conds.length === 1 ? conds[0] : or(...conds))
+        .limit(1);
     }
-  } else if (player && user.googleId && !player.googleId) {
-    await db.update(players).set({ googleId: user.googleId }).where(eq(players.id, player.id));
-    player.googleId = user.googleId;
-  }
 
-  return player;
-}
+    let player = rows[0] ?? null;
+
+    // Si el usuario está autenticado pero aún no tiene fila en players, la creamos automáticamente
+    if (!player && (user.email || user.googleId)) {
+      try {
+        const defaultName =
+          user.name?.trim() || (user.email ? user.email.split("@")[0] : "Jugador");
+        const inserted = await db
+          .insert(players)
+          .values({
+            name: defaultName,
+            email: user.email ? user.email.toLowerCase().trim() : null,
+            googleId: user.googleId || null,
+            stars: "3.0",
+            priorityOrder: 99,
+            preferredPosition: "MED",
+            preferredFoot: "R",
+          })
+          .returning();
+        if (inserted[0]) {
+          player = inserted[0];
+        }
+      } catch (e) {
+        console.error("Error auto-creando jugador para usuario autenticado:", e);
+        try {
+          const requery = await db
+            .select()
+            .from(players)
+            .where(conds.length === 1 ? conds[0] : or(...conds))
+            .limit(1);
+          player = requery[0] ?? null;
+        } catch {}
+      }
+    } else if (player && user.googleId && !player.googleId) {
+      try {
+        await db.update(players).set({ googleId: user.googleId }).where(eq(players.id, player.id));
+        player.googleId = user.googleId;
+      } catch (e) {
+        console.warn("Could not link googleId to existing player:", e);
+      }
+    }
+
+    return player;
+  } catch (err) {
+    console.error("[getCurrentPlayer] Error:", err);
+    return null;
+  }
+});
 
 /**
  * Devuelve el rol del jugador actual en el grupo dado.
@@ -98,45 +114,47 @@ export async function getCurrentPlayer(): Promise<Player | null> {
 export async function getPlayerGroupRole(
   groupId: number
 ): Promise<"admin" | "member" | null> {
-  const player = await getCurrentPlayer();
-  if (!player) return null;
+  try {
+    const player = await getCurrentPlayer();
+    if (!player) return null;
 
-  const row = await db
-    .select({ role: groupMembers.role, status: groupMembers.status })
-    .from(groupMembers)
-    .where(
-      and(
-        eq(groupMembers.groupId, groupId),
-        eq(groupMembers.playerId, player.id),
-        eq(groupMembers.status, "active")
+    const row = await db
+      .select({ role: groupMembers.role, status: groupMembers.status })
+      .from(groupMembers)
+      .where(
+        and(
+          eq(groupMembers.groupId, groupId),
+          eq(groupMembers.playerId, player.id),
+          eq(groupMembers.status, "active")
+        )
       )
-    )
-    .limit(1);
+      .limit(1);
 
-  if (row[0]?.role) {
-    return row[0].role;
+    if (row[0]?.role) {
+      return row[0].role;
+    }
+
+    const grp = (
+      await db
+        .select({ createdBy: groups.createdBy })
+        .from(groups)
+        .where(eq(groups.id, groupId))
+        .limit(1)
+    )[0];
+
+    if (grp && grp.createdBy === player.id) {
+      return "admin";
+    }
+
+    return null;
+  } catch (err) {
+    console.error("[getPlayerGroupRole] Error:", err);
+    return null;
   }
-
-  // Si no está registrado en groupMembers pero es el creador específico de este grupo
-  const grp = (
-    await db
-      .select({ createdBy: groups.createdBy })
-      .from(groups)
-      .where(eq(groups.id, groupId))
-      .limit(1)
-  )[0];
-
-  if (grp && grp.createdBy === player.id) {
-    return "admin";
-  }
-
-  return null;
 }
 
 /**
  * Verifica si el jugador actual es admin del grupo.
- * SOLO retorna true si el jugador tiene el rol 'admin' en group_members,
- * o si es estrictamente el creador del grupo.
  */
 export async function isGroupAdmin(groupId: number): Promise<boolean> {
   const role = await getPlayerGroupRole(groupId);
@@ -145,24 +163,27 @@ export async function isGroupAdmin(groupId: number): Promise<boolean> {
   const player = await getCurrentPlayer();
   if (!player) return false;
 
-  // Solo como respaldo estricto si es el creador original de este grupo específico
-  const grp = (
-    await db
-      .select({ createdBy: groups.createdBy })
-      .from(groups)
-      .where(eq(groups.id, groupId))
-      .limit(1)
-  )[0];
+  try {
+    const grp = (
+      await db
+        .select({ createdBy: groups.createdBy })
+        .from(groups)
+        .where(eq(groups.id, groupId))
+        .limit(1)
+    )[0];
 
-  if (grp && grp.createdBy === player.id) {
-    await db
-      .insert(groupMembers)
-      .values({ groupId, playerId: player.id, role: "admin", status: "active" })
-      .onConflictDoUpdate({
-        target: [groupMembers.groupId, groupMembers.playerId],
-        set: { role: "admin", status: "active" },
-      });
-    return true;
+    if (grp && grp.createdBy === player.id) {
+      await db
+        .insert(groupMembers)
+        .values({ groupId, playerId: player.id, role: "admin", status: "active" })
+        .onConflictDoUpdate({
+          target: [groupMembers.groupId, groupMembers.playerId],
+          set: { role: "admin", status: "active" },
+        });
+      return true;
+    }
+  } catch (err) {
+    console.error("[isGroupAdmin] Error:", err);
   }
 
   return false;
@@ -188,46 +209,51 @@ export async function isGroupMember(groupId: number): Promise<boolean> {
 /**
  * Devuelve todos los grupos activos del jugador actual.
  */
-export async function getPlayerGroups(): Promise<
-  (Group & { role: "admin" | "member"; pendingRequests?: number })[]
-> {
-  const player = await getCurrentPlayer();
-  if (!player) return [];
+export const getPlayerGroups = cache(
+  async (): Promise<(Group & { role: "admin" | "member"; pendingRequests?: number })[]> => {
+    try {
+      const player = await getCurrentPlayer();
+      if (!player) return [];
 
-  const rows = await db
-    .select({
-      id: groups.id,
-      name: groups.name,
-      slug: groups.slug,
-      description: groups.description,
-      format: groups.format,
-      defaultCapacity: groups.defaultCapacity,
-      defaultDayOfWeek: groups.defaultDayOfWeek,
-      defaultTime: groups.defaultTime,
-      inviteCode: groups.inviteCode,
-      ptsWin: groups.ptsWin,
-      ptsDraw: groups.ptsDraw,
-      ptsLoss: groups.ptsLoss,
-      teamAName: groups.teamAName,
-      teamBName: groups.teamBName,
-      isPro: groups.isPro,
-      proPlan: groups.proPlan,
-      proExpiresAt: groups.proExpiresAt,
-      stripeCustomerId: groups.stripeCustomerId,
-      stripeSubscriptionId: groups.stripeSubscriptionId,
-      mpPreapprovalId: groups.mpPreapprovalId,
-      createdBy: groups.createdBy,
-      createdAt: groups.createdAt,
-      role: groupMembers.role,
-    })
-    .from(groupMembers)
-    .innerJoin(groups, eq(groups.id, groupMembers.groupId))
-    .where(
-      and(
-        eq(groupMembers.playerId, player.id),
-        eq(groupMembers.status, "active")
-      )
-    );
+      const rows = await db
+        .select({
+          id: groups.id,
+          name: groups.name,
+          slug: groups.slug,
+          description: groups.description,
+          format: groups.format,
+          defaultCapacity: groups.defaultCapacity,
+          defaultDayOfWeek: groups.defaultDayOfWeek,
+          defaultTime: groups.defaultTime,
+          inviteCode: groups.inviteCode,
+          ptsWin: groups.ptsWin,
+          ptsDraw: groups.ptsDraw,
+          ptsLoss: groups.ptsLoss,
+          teamAName: groups.teamAName,
+          teamBName: groups.teamBName,
+          isPro: groups.isPro,
+          proPlan: groups.proPlan,
+          proExpiresAt: groups.proExpiresAt,
+          stripeCustomerId: groups.stripeCustomerId,
+          stripeSubscriptionId: groups.stripeSubscriptionId,
+          mpPreapprovalId: groups.mpPreapprovalId,
+          createdBy: groups.createdBy,
+          createdAt: groups.createdAt,
+          role: groupMembers.role,
+        })
+        .from(groupMembers)
+        .innerJoin(groups, eq(groups.id, groupMembers.groupId))
+        .where(
+          and(
+            eq(groupMembers.playerId, player.id),
+            eq(groupMembers.status, "active")
+          )
+        );
 
-  return rows;
-}
+      return rows;
+    } catch (err) {
+      console.error("[getPlayerGroups] Error:", err);
+      return [];
+    }
+  }
+);

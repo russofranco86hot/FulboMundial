@@ -6,6 +6,7 @@ import { eq, sql } from "drizzle-orm";
 let credentialsTableChecked = false;
 
 export async function ensureCredentialsTable() {
+  if (process.env.RUN_DB_MIGRATIONS !== "true") return;
   if (credentialsTableChecked) return;
   try {
     await db.execute(sql`

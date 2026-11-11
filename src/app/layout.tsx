@@ -38,6 +38,8 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
+export const dynamic = "force-dynamic";
+
 // Layout principal de la aplicación
 export default async function RootLayout({
   children,
