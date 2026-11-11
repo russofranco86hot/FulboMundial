@@ -16,9 +16,11 @@
   "workers_dev": true,
   "vars": {
     "APP_URL": "https://fulbomundial.com.ar",
+    "NEXT_PUBLIC_APP_URL": "https://fulbomundial.com.ar",
     "NEXTAUTH_URL": "https://fulbomundial.com.ar",
     "AUTH_TRUST_HOST": "true",
-    "PRO_WHITELIST_SLUGS": "futbol-miercoles"
+    "PRO_WHITELIST_SLUGS": "futbol-miercoles",
+    "NEXT_PUBLIC_MP_PUBLIC_KEY": "APP_USR-84f362cd-bc2b-4ec0-a187-4c2a027a3f57"
   },
   "routes": [
     { "pattern": "fulbomundial.com.ar/*", "zone_name": "fulbomundial.com.ar" },

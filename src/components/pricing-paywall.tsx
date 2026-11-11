@@ -16,7 +16,6 @@ import {
   PRO_PLANS,
   PRO_FEATURES_COMPARISON,
   type ProPlanId,
-  type PaymentProvider,
 } from "@/lib/plans";
 
 interface PricingPaywallProps {
@@ -37,14 +36,14 @@ export function PricingPaywall({
   isSuperAdmin,
 }: PricingPaywallProps) {
   const [selectedPlan, setSelectedPlan] = useState<ProPlanId>("pro_annual");
-  const [loadingProvider, setLoadingProvider] = useState<PaymentProvider | null>(null);
+  const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const activePlan = PRO_PLANS[selectedPlan];
 
-  async function handleCheckout(provider: PaymentProvider) {
+  async function handleCheckout() {
     setErrorMsg(null);
-    setLoadingProvider(provider);
+    setLoading(true);
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
@@ -52,7 +51,7 @@ export function PricingPaywall({
         body: JSON.stringify({
           groupSlug,
           planId: selectedPlan,
-          provider,
+          provider: "mercadopago",
         }),
       });
 
@@ -63,15 +62,15 @@ export function PricingPaywall({
       };
 
       if (!res.ok || !data.checkoutUrl) {
-        throw new Error(data.error || "No se pudo iniciar el checkout.");
+        throw new Error(data.error || "No se pudo iniciar el pago con Mercado Pago.");
       }
 
       window.location.href = data.checkoutUrl;
     } catch (err) {
       setErrorMsg(
-        err instanceof Error ? err.message : "Ocurrió un error al conectar con la pasarela."
+        err instanceof Error ? err.message : "Ocurrió un error al conectar con Mercado Pago."
       );
-      setLoadingProvider(null);
+      setLoading(false);
     }
   }
 
@@ -152,11 +151,11 @@ export function PricingPaywall({
                 <div className="pt-1">
                   <div className="text-2xl font-black leading-none">{plan.priceArsFormatted}</div>
                   <div
-                    className={`text-xs mt-1 ${
-                      isSelected ? "text-zinc-300" : "text-zinc-500 dark:text-zinc-400"
+                    className={`text-xs mt-1 font-semibold ${
+                      isSelected ? "text-emerald-300" : "text-zinc-500 dark:text-zinc-400"
                     }`}
                   >
-                    o {plan.priceUsdFormatted} Internacional · {plan.periodLabel}
+                    {plan.periodLabel} · Pesos Argentinos
                   </div>
                 </div>
 
@@ -183,12 +182,12 @@ export function PricingPaywall({
         })}
       </div>
 
-      {/* Caja de Checkout (Mercado Pago + Stripe) */}
+      {/* Caja de Checkout con Mercado Pago */}
       <div className="rounded-3xl border-2 border-amber-400/50 bg-gradient-to-br from-zinc-950 via-emerald-950 to-zinc-900 text-white p-6 shadow-2xl space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
           <div>
             <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-amber-300">
-              <Sparkles size={14} /> Activación Instantánea por Webhook
+              <Sparkles size={14} /> Activación Instantánea con Mercado Pago
             </span>
             <h3 className="text-xl font-black mt-0.5">
               {activePlan.name} para “{groupName}”
@@ -201,9 +200,7 @@ export function PricingPaywall({
             <div className="text-2xl font-black text-amber-300">
               {activePlan.priceArsFormatted}
             </div>
-            <div className="text-xs text-zinc-400">
-              ({activePlan.priceUsdFormatted} vía Stripe)
-            </div>
+            <div className="text-xs text-zinc-400">{activePlan.periodLabel}</div>
           </div>
         </div>
 
@@ -219,24 +216,16 @@ export function PricingPaywall({
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-[#25D366] hover:bg-[#1ebe5a] text-white font-black text-xs shadow-sm"
               >
-                <MessageCircle size={14} /> Solicitar activación por Transferencia / WhatsApp
+                <MessageCircle size={14} /> Solicitar activación por WhatsApp
               </a>
-              {isSuperAdmin && (
-                <Link
-                  href="/superadmin"
-                  className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-zinc-950 font-black text-xs shadow-sm"
-                >
-                  <Crown size={14} /> Activar PRO gratis desde Panel Dueño →
-                </Link>
-              )}
             </div>
           </div>
         )}
 
-        {isSuperAdmin && !errorMsg && (
+        {isSuperAdmin && (
           <div className="rounded-2xl bg-amber-400/15 border border-amber-400/40 p-3.5 flex flex-wrap items-center justify-between gap-2 text-xs">
             <span className="text-amber-200 font-bold">
-              👑 Sos el dueño de la aplicación: podés habilitar o quitar PRO en cualquier grupo sin pasar por la pasarela.
+              👑 Sos el dueño de la aplicación: también podés habilitar o quitar PRO manualmente desde tu panel.
             </span>
             <Link
               href="/superadmin"
@@ -247,50 +236,31 @@ export function PricingPaywall({
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            type="button"
-            disabled={loadingProvider !== null}
-            onClick={() => handleCheckout("mercadopago")}
-            className="py-3.5 px-5 rounded-2xl bg-[#009EE3] hover:bg-[#0088c7] disabled:opacity-60 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#009EE3]/30 transition-all"
-          >
-            {loadingProvider === "mercadopago" ? (
-              <>
-                <Loader2 size={18} className="animate-spin" /> Redirigiendo a Mercado Pago...
-              </>
-            ) : (
-              <>
-                <CreditCard size={18} /> Pagar con Mercado Pago ({activePlan.priceArsFormatted})
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
-            disabled={loadingProvider !== null}
-            onClick={() => handleCheckout("stripe")}
-            className="py-3.5 px-5 rounded-2xl bg-[#635BFF] hover:bg-[#5249e0] disabled:opacity-60 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#635BFF]/30 transition-all"
-          >
-            {loadingProvider === "stripe" ? (
-              <>
-                <Loader2 size={18} className="animate-spin" /> Redirigiendo a Stripe...
-              </>
-            ) : (
-              <>
-                <CreditCard size={18} /> Pagar con Stripe ({activePlan.priceUsdFormatted})
-              </>
-            )}
-          </button>
-        </div>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={handleCheckout}
+          className="w-full py-4 px-6 rounded-2xl bg-[#009EE3] hover:bg-[#0088c7] disabled:opacity-60 text-white font-black text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-xl shadow-[#009EE3]/30 transition-all hover:scale-[1.005]"
+        >
+          {loading ? (
+            <>
+              <Loader2 size={20} className="animate-spin" /> Redirigiendo a Mercado Pago...
+            </>
+          ) : (
+            <>
+              <CreditCard size={20} /> Pagar con Mercado Pago ({activePlan.priceArsFormatted})
+            </>
+          )}
+        </button>
 
         <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-zinc-400 pt-1">
           <span className="inline-flex items-center gap-1">
-            <ShieldCheck size={14} className="text-emerald-400" /> Pagos encriptados SSL 256-bit
+            <ShieldCheck size={14} className="text-emerald-400" /> Dinero en cuenta, Débito o Crédito
           </span>
           <span>•</span>
           <span>Activación automática al acreditarse el pago</span>
           <span>•</span>
-          <span>Sin comisiones ocultas</span>
+          <span>Checkout Oficial Mercado Pago</span>
         </div>
       </div>
 

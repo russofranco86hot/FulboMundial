@@ -1,5 +1,5 @@
 import { getGroupBySlug } from "@/lib/groups";
-import { isGroupPro } from "@/lib/billing";
+import { isGroupPro, verifyAndActivateMercadoPagoPayment } from "@/lib/billing";
 import { isSuperAdmin } from "@/lib/superadmin";
 import { PricingPaywall } from "@/components/pricing-paywall";
 import { ProBadge } from "@/components/pro-gate";
@@ -14,10 +14,25 @@ export default async function GroupProPage({
   searchParams,
 }: {
   params: Promise<{ groupSlug: string }>;
-  searchParams: Promise<{ status?: string; provider?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    payment_id?: string;
+    collection_id?: string;
+  }>;
 }) {
   const { groupSlug } = await params;
-  const { status, provider } = await searchParams;
+  const { status, payment_id, collection_id } = await searchParams;
+
+  // Si Mercado Pago redirigió de vuelta con payment_id / collection_id, verificamos y activamos al instante
+  const mpPaymentId = payment_id || collection_id;
+  if (mpPaymentId && mpPaymentId !== "null") {
+    try {
+      await verifyAndActivateMercadoPagoPayment(mpPaymentId);
+    } catch (err) {
+      console.warn("[GroupProPage] Error verificando payment_id en retorno:", err);
+    }
+  }
+
   const [group, superAdmin] = await Promise.all([
     getGroupBySlug(groupSlug),
     isSuperAdmin(),
@@ -51,11 +66,11 @@ export default async function GroupProPage({
         <div className="rounded-2xl bg-emerald-500/15 border border-emerald-500/40 p-4 text-sm font-semibold text-emerald-900 dark:text-emerald-200 flex items-start gap-3">
           <CheckCircle2 className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" size={22} />
           <div>
-            <p className="font-black">¡Pago recibido correctamente!</p>
+            <p className="font-black">¡Pago con Mercado Pago recibido correctamente!</p>
             <p className="text-xs opacity-90 mt-0.5">
               {proActive
                 ? "Tu grupo ya tiene todas las funciones PRO activas. ¡A disfrutar!"
-                : `Estamos procesando la confirmación de ${provider === "stripe" ? "Stripe" : "Mercado Pago"} vía Webhook. En unos segundos verás el estado actualizado.`}
+                : "Estamos procesando la confirmación de Mercado Pago. En unos segundos verás el estado PRO activo."}
             </p>
           </div>
         </div>
@@ -67,7 +82,7 @@ export default async function GroupProPage({
           <div>
             <p className="font-black">Pago pendiente de acreditación</p>
             <p className="text-xs opacity-90 mt-0.5">
-              Apenas la pasarela confirme el pago, nuestro Webhook activará automáticamente el plan PRO en este grupo.
+              Apenas Mercado Pago confirme el pago, nuestro sistema activará automáticamente el plan PRO en este grupo.
             </p>
           </div>
         </div>
@@ -79,7 +94,7 @@ export default async function GroupProPage({
           <div>
             <p className="font-black">El pago no se completó</p>
             <p className="text-xs opacity-90 mt-0.5">
-              No se realizó ningún cargo. Podés volver a intentarlo con Mercado Pago o Stripe cuando quieras.
+              No se realizó ningún cargo. Podés volver a intentarlo con Mercado Pago cuando quieras.
             </p>
           </div>
         </div>

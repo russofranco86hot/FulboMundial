@@ -251,6 +251,113 @@ export async function createMercadoPagoPreference(opts: {
 }
 
 /**
+ * Consulta un pago directamente en la API oficial de Mercado Pago (`GET /v1/payments/{id}`)
+ * y si está `approved`, activa el plan PRO en el grupo correspondiente de forma idempotente.
+ */
+export async function verifyAndActivateMercadoPagoPayment(paymentId: string): Promise<{
+  ok: boolean;
+  status: string;
+  activated?: boolean;
+  alreadyProcessed?: boolean;
+  expiresAt?: Date | null;
+}> {
+  const accessToken = process.env.MP_ACCESS_TOKEN;
+  if (!accessToken) {
+    throw new Error("MP_ACCESS_TOKEN no configurado en el servidor.");
+  }
+
+  const mpRes = await fetch(
+    `https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: "no-store",
+    }
+  );
+
+  if (!mpRes.ok) {
+    const txt = await mpRes.text();
+    throw new Error(`No se pudo verificar el pago ${paymentId} en MP: ${txt}`);
+  }
+
+  const payment = (await mpRes.json()) as {
+    id: number | string;
+    status: string;
+    transaction_amount?: number;
+    currency_id?: string;
+    external_reference?: string;
+    metadata?: {
+      group_id?: string | number;
+      player_id?: string | number;
+      plan_id?: string;
+    };
+  };
+
+  if (payment.status !== "approved") {
+    return {
+      ok: true,
+      status: payment.status,
+      activated: false,
+    };
+  }
+
+  let groupId = Number(payment.metadata?.group_id || 0);
+  let playerId = payment.metadata?.player_id ? Number(payment.metadata.player_id) : null;
+  let planId: ProPlanId =
+    (payment.metadata?.plan_id as ProPlanId) || "pro_monthly";
+
+  if ((!groupId || Number.isNaN(groupId)) && payment.external_reference) {
+    try {
+      const parsedRef = JSON.parse(payment.external_reference) as {
+        groupId?: number;
+        playerId?: number;
+        planId?: ProPlanId;
+      };
+      if (parsedRef.groupId) groupId = Number(parsedRef.groupId);
+      if (parsedRef.playerId) playerId = Number(parsedRef.playerId);
+      if (parsedRef.planId) planId = parsedRef.planId;
+    } catch {
+      const asNum = Number(payment.external_reference);
+      if (!Number.isNaN(asNum) && asNum > 0) {
+        groupId = asNum;
+      }
+    }
+  }
+
+  if (!groupId || Number.isNaN(groupId)) {
+    return {
+      ok: false,
+      status: payment.status,
+      activated: false,
+    };
+  }
+
+  const activation = await activateGroupPro({
+    provider: "mercadopago",
+    externalEventId: `mp_payment_${payment.id}`,
+    paymentId: String(payment.id),
+    groupId,
+    playerId,
+    planId,
+    amount: payment.transaction_amount ?? 0,
+    currency: payment.currency_id ?? "ARS",
+    rawPayload: {
+      id: payment.id,
+      status: payment.status,
+    },
+  });
+
+  return {
+    ok: true,
+    status: payment.status,
+    activated: activation.ok,
+    alreadyProcessed: activation.alreadyProcessed,
+    expiresAt: activation.expiresAt,
+  };
+}
+
+/**
  * Crea una sesión de Checkout en Stripe (USD / Internacional).
  */
 export async function createStripeCheckoutSession(opts: {
