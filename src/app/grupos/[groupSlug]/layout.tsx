@@ -17,7 +17,7 @@ export default async function GroupLayout({
   const { groupSlug } = await params;
   const user = await getSessionUser();
 
-  if (!user) redirect("/");
+  if (!user) redirect(`/login?callbackUrl=${encodeURIComponent(`/grupos/${groupSlug}`)}`);
 
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();

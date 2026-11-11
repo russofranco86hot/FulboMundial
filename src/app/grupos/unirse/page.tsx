@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
 import { getSessionUser, getCurrentPlayer } from "@/lib/session";
+import { getGroupByInviteCode } from "@/lib/groups";
 import { actionRequestJoin } from "../actions";
 import Link from "next/link";
-import { ArrowLeft, Hash } from "lucide-react";
+import { ArrowLeft, Hash, Shield } from "lucide-react";
+
+export const dynamic = "force-dynamic";
 
 export default async function UnirsePage({
   searchParams,
@@ -10,13 +13,15 @@ export default async function UnirsePage({
   searchParams: Promise<{ code?: string; error?: string }>;
 }) {
   const params = await searchParams;
+  const cleanCode = params.code ? params.code.trim().toUpperCase() : "";
   const user = await getSessionUser();
   if (!user) {
-    const callback = params.code ? `/grupos/unirse?code=${params.code}` : "/grupos/unirse";
+    const callback = cleanCode ? `/grupos/unirse?code=${cleanCode}` : "/grupos/unirse";
     redirect(`/login?callbackUrl=${encodeURIComponent(callback)}`);
   }
 
-  const player = await getCurrentPlayer();
+  await getCurrentPlayer();
+  const invitedGroup = cleanCode ? await getGroupByInviteCode(cleanCode) : null;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -29,6 +34,23 @@ export default async function UnirsePage({
           <p className="text-sm text-pitch-900/60 dark:text-zinc-400">Usá el código que te compartieron</p>
         </div>
       </div>
+
+      {invitedGroup && (
+        <div className="card border-emerald-500/40 bg-emerald-500/10 dark:bg-emerald-950/30 p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+            <Shield size={20} />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+              Grupo encontrado
+            </p>
+            <p className="text-base font-extrabold text-zinc-900 dark:text-zinc-100 truncate">
+              {invitedGroup.name}{" "}
+              <span className="text-xs font-semibold text-zinc-500">({invitedGroup.format})</span>
+            </p>
+          </div>
+        </div>
+      )}
 
       {params.error && (
         <div className="card bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm p-3 rounded-xl">
@@ -48,9 +70,9 @@ export default async function UnirsePage({
               name="code"
               placeholder="FULB01"
               maxLength={6}
-              defaultValue={params.code}
+              defaultValue={cleanCode}
               className="input pl-8 uppercase tracking-widest font-mono text-lg"
-              autoFocus
+              autoFocus={!cleanCode}
             />
           </div>
           <p className="text-xs text-pitch-900/40 dark:text-zinc-600">
@@ -71,7 +93,7 @@ export default async function UnirsePage({
         </div>
 
         <button type="submit" className="btn-primary w-full">
-          Enviar solicitud
+          {invitedGroup ? `Solicitar unirme a ${invitedGroup.name}` : "Enviar solicitud"}
         </button>
       </form>
 

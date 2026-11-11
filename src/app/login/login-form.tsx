@@ -5,12 +5,19 @@ import { actionRegisterCredentials } from "./actions";
 import { signIn } from "next-auth/react";
 import { LogIn, UserPlus, Mail, Lock, User, AlertCircle } from "lucide-react";
 
-export function LoginForm() {
-  const [mode, setMode] = useState<"login" | "register">("login");
+export function LoginForm({
+  callbackUrl = "/grupos",
+  defaultMode = "login",
+}: {
+  callbackUrl?: string;
+  defaultMode?: "login" | "register";
+}) {
+  const [mode, setMode] = useState<"login" | "register">(defaultMode);
   const [loginPending, setLoginPending] = useState(false);
   const [regPending, setRegPending] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [regError, setRegError] = useState<string | null>(null);
+  const targetUrl = callbackUrl && callbackUrl.startsWith("/") ? callbackUrl : "/grupos";
 
   async function handleLoginSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -40,7 +47,7 @@ export function LoginForm() {
         return;
       }
 
-      window.location.href = "/grupos";
+      window.location.href = targetUrl;
     } catch {
       setLoginError("Error al iniciar sesión. Verificá tus credenciales.");
       setLoginPending(false);
@@ -87,7 +94,7 @@ export function LoginForm() {
         return;
       }
 
-      window.location.href = "/grupos";
+      window.location.href = targetUrl;
     } catch {
       setRegError("Ocurrió un problema al registrar la cuenta. Intentá nuevamente.");
       setRegPending(false);
@@ -98,7 +105,7 @@ export function LoginForm() {
     <div className="w-full max-w-sm space-y-5 animate-fade-in">
       {/* Botón de Google */}
       <button
-        onClick={() => signIn("google", { callbackUrl: "/grupos" })}
+        onClick={() => signIn("google", { callbackUrl: targetUrl })}
         type="button"
         className="btn-ghost w-full py-2.5 px-4 flex items-center justify-center gap-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-750 shadow-sm text-sm font-semibold text-zinc-700 dark:text-zinc-200"
       >
