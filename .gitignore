@@ -43,3 +43,9 @@ next-env.d.ts
 *.swo
 
 !.env.example
+
+# android / ios build artifacts & signing keys
+/android-playstore/
+*.keystore
+*.jks
+signing-key-info.txt

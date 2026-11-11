@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ar.com.fulbomundial.twa",
+      "sha256_cert_fingerprints": [
+        "89:3A:EB:DA:E2:F0:EE:86:F1:D3:8C:87:8F:D7:A0:1E:76:B2:DB:18:4C:75:46:66:90:2B:A2:EC:02:26:B9:43"
+      ]
+    }
+  }
+]
