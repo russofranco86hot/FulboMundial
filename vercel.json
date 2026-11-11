@@ -1,4 +1,5 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
       "path": "/api/cron/open-signups",
@@ -11,6 +12,44 @@
     {
       "path": "/api/cron/match-reminder",
       "schedule": "0 21 * * 3"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.fulbomundial.com.ar"
+        }
+      ],
+      "destination": "https://fulbomundial.com.ar/:path*",
+      "permanent": true
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        }
+      ]
+    },
+    {
+      "source": "/api/webhooks/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, stripe-signature, x-signature, x-request-id"
+        }
+      ]
     }
   ]
 }

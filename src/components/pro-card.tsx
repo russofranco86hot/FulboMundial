@@ -1,27 +1,28 @@
-import { Sparkles, Mic, Camera, Flame, BellRing, Crown, MessageCircle } from "lucide-react";
+import Link from "next/link";
+import { Sparkles, Mic, Camera, Flame, BellRing, Crown, MessageCircle, ArrowRight, CheckCircle2 } from "lucide-react";
 
-/**
- * Tarjeta de venta "FulboMundial PRO para este Grupo".
- * Configurable por variables de entorno (Vercel):
- *  - NEXT_PUBLIC_MP_PRO_LINK: link de pago / suscripción de Mercado Pago.
- *  - NEXT_PUBLIC_PRO_WHATSAPP: número con código de país (ej. 5491122334455) para consultas.
- *  - NEXT_PUBLIC_PRO_PRICE: texto de precio (default "$4.000 / mes").
- */
 const BENEFITS = [
   { icon: Mic, text: "Crónicas y audios de relator con IA ilimitados" },
   { icon: Camera, text: "Tácticas y tarjetas EA FC en HD con el nombre de tu grupo" },
   { icon: Flame, text: "Stats folclóricas completas: Amuleto, Mufa, Dúos Tóxicos y Clásicos" },
-  { icon: BellRing, text: "Recordatorios automáticos a los que no pagaron" },
+  { icon: BellRing, text: "Historial ilimitado y recordatorios automáticos a deudores" },
 ];
 
-export function ProCard({ groupName }: { groupName: string }) {
-  const mpLink = process.env.NEXT_PUBLIC_MP_PRO_LINK;
+export function ProCard({
+  groupName,
+  groupSlug,
+  isPro = false,
+}: {
+  groupName: string;
+  groupSlug?: string;
+  isPro?: boolean;
+}) {
   const wa = process.env.NEXT_PUBLIC_PRO_WHATSAPP;
   const price = process.env.NEXT_PUBLIC_PRO_PRICE || "$4.000 / mes";
 
   const waHref = wa
     ? `https://wa.me/${wa}?text=${encodeURIComponent(
-        `Hola! Quiero activar FulboMundial PRO para el grupo "${groupName}".`
+        `Hola! Quiero consultar por FulboMundial PRO para el grupo "${groupName}".`
       )}`
     : null;
 
@@ -43,8 +44,16 @@ export function ProCard({ groupName }: { groupName: string }) {
           </div>
         </div>
         <div className="text-right shrink-0">
-          <span className="block text-lg font-black text-amber-300 leading-tight">{price}</span>
-          <span className="text-[10px] text-zinc-400">por grupo, no por jugador</span>
+          {isPro ? (
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-400/20 border border-emerald-400/40 text-emerald-300 text-xs font-black">
+              <CheckCircle2 size={14} /> ACTIVO
+            </span>
+          ) : (
+            <>
+              <span className="block text-lg font-black text-amber-300 leading-tight">{price}</span>
+              <span className="text-[10px] text-zinc-400">por grupo, no por jugador</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -59,25 +68,18 @@ export function ProCard({ groupName }: { groupName: string }) {
         ))}
       </ul>
 
-      <p className="relative text-[11px] text-zinc-400">
-        Son menos de medio alfajor por jugador al mes. Pagá con Mercado Pago y escribinos el nombre del grupo para activarlo.
-      </p>
-
-      <div className="relative flex flex-col sm:flex-row gap-2">
-        {mpLink ? (
-          <a
-            href={mpLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 py-3 px-4 rounded-2xl bg-[#009EE3] hover:bg-[#0088c7] text-white font-extrabold text-sm text-center shadow-lg shadow-[#009EE3]/30 transition-all"
+      <div className="relative flex flex-col sm:flex-row gap-2 pt-1">
+        {groupSlug ? (
+          <Link
+            href={`/grupos/${groupSlug}/pro`}
+            className="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 hover:to-yellow-200 text-zinc-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-400/25 transition-all"
           >
-            💳 Activar PRO con Mercado Pago
-          </a>
-        ) : (
-          <span className="flex-1 py-3 px-4 rounded-2xl bg-white/10 text-zinc-300 font-bold text-sm text-center">
-            Próximamente: pago con Mercado Pago
-          </span>
-        )}
+            <Crown size={16} />
+            {isPro ? "Gestionar Suscripción PRO" : "Activar PRO (Mercado Pago / Stripe)"}
+            <ArrowRight size={15} />
+          </Link>
+        ) : null}
+
         {waHref && (
           <a
             href={waHref}

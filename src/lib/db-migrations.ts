@@ -109,6 +109,37 @@ export async function ensureDbUpgrades() {
       console.warn("Migration notice (name_change_requests):", e);
     }
 
+    // 8. Monetización Freemium PRO en groups y tabla de transacciones idempotentes
+    try {
+      await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS is_pro BOOLEAN NOT NULL DEFAULT FALSE;`);
+      await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS pro_plan TEXT;`);
+      await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS pro_expires_at TIMESTAMPTZ;`);
+      await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;`);
+      await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;`);
+      await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS mp_preapproval_id TEXT;`);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS subscription_transactions (
+          id SERIAL PRIMARY KEY,
+          provider TEXT NOT NULL,
+          external_event_id TEXT NOT NULL UNIQUE,
+          payment_id TEXT,
+          group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
+          player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+          plan_id TEXT NOT NULL,
+          amount INTEGER NOT NULL DEFAULT 0,
+          currency TEXT NOT NULL DEFAULT 'ARS',
+          status TEXT NOT NULL,
+          raw_payload JSONB,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
+      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS subscription_tx_event_uniq ON subscription_transactions(external_event_id);`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS subscription_tx_group_idx ON subscription_transactions(group_id);`);
+    } catch (e) {
+      console.warn("Migration notice (pro monetization):", e);
+    }
+
     migrationsRun = true;
   } catch (err) {
     console.error("Error running DB upgrades:", err);

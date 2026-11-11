@@ -68,6 +68,13 @@ export const groups = pgTable(
     ptsLoss: integer("pts_loss").notNull().default(1),
     teamAName: text("team_a_name").notNull().default("Claro"),
     teamBName: text("team_b_name").notNull().default("Oscuro"),
+    // Monetización / Plan PRO (Freemium B2C)
+    isPro: boolean("is_pro").notNull().default(false),
+    proPlan: text("pro_plan"), // 'pro_monthly' | 'pro_annual' | 'pro_lifetime'
+    proExpiresAt: timestamp("pro_expires_at", { withTimezone: true }),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    mpPreapprovalId: text("mp_preapproval_id"),
     createdBy: integer("created_by").references(() => players.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -419,5 +426,31 @@ export const nameChangeRequests = pgTable(
 );
 
 export type NameChangeRequest = typeof nameChangeRequests.$inferSelect;
+
+// ─── subscription_transactions (Pagos PRO / Webhooks Idempotentes) ────────
+export const subscriptionTransactions = pgTable(
+  "subscription_transactions",
+  {
+    id: serial("id").primaryKey(),
+    provider: text("provider").notNull(), // 'mercadopago' | 'stripe' | 'manual'
+    externalEventId: text("external_event_id").notNull(),
+    paymentId: text("payment_id"),
+    groupId: integer("group_id").references(() => groups.id, { onDelete: "cascade" }),
+    playerId: integer("player_id").references(() => players.id, { onDelete: "set null" }),
+    planId: text("plan_id").notNull(), // 'pro_monthly' | 'pro_annual' | 'pro_lifetime'
+    amount: integer("amount").notNull().default(0),
+    currency: text("currency").notNull().default("ARS"),
+    status: text("status").notNull(), // 'approved' | 'pending' | 'rejected' | 'cancelled'
+    rawPayload: jsonb("raw_payload"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqEvent: uniqueIndex("subscription_tx_event_uniq").on(t.externalEventId),
+    byGroup: index("subscription_tx_group_idx").on(t.groupId),
+  })
+);
+
+export type SubscriptionTransaction = typeof subscriptionTransactions.$inferSelect;
+
 
 

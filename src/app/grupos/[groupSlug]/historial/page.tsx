@@ -3,6 +3,9 @@ import { getStandings, getRecentMatches } from "@/lib/queries";
 import { getGroupTopScorers } from "@/lib/goals";
 import { formatArt } from "@/lib/time";
 import { isGroupAdmin } from "@/lib/session";
+import { isGroupPro } from "@/lib/billing";
+import { FREE_LIMITS } from "@/lib/plans";
+import { ProBadge, ProBanner } from "@/components/pro-gate";
 import { Trophy } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -18,17 +21,23 @@ export default async function GroupHistorialPage({
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();
 
+  const proActive = isGroupPro(group);
   const rows = await getStandings(group.id);
-  const recentMatches = await getRecentMatches(group.id, 10);
+  const recentMatches = await getRecentMatches(group.id, proActive ? 50 : 10);
+  const visibleMatches = proActive
+    ? recentMatches
+    : recentMatches.slice(0, FREE_LIMITS.maxRecentMatchesInHistory);
+  const hiddenMatchesCount = Math.max(0, recentMatches.length - visibleMatches.length);
   const topScorers = await getGroupTopScorers(group.id);
   const isAdmin = await isGroupAdmin(group.id);
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-extrabold text-pitch-700 dark:text-zinc-100 flex items-center gap-2">
+        <h1 className="text-2xl font-extrabold text-pitch-700 dark:text-zinc-100 flex items-center gap-2 flex-wrap">
           <Trophy className="w-6 h-6 text-gold-500" />
           Historial — {group.name}
+          <ProBadge active={proActive} />
         </h1>
         <p className="text-sm text-pitch-900/60 dark:text-zinc-400 mt-1">
           Tabla histórica de los partidos jugados. Pts = (G×3 + E×2 + P×1).
@@ -193,9 +202,16 @@ export default async function GroupHistorialPage({
 
       {recentMatches.length > 0 && (
         <div className="space-y-4">
-          <h2 className="font-bold text-pitch-700 dark:text-zinc-200">Últimos partidos</h2>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h2 className="font-bold text-pitch-700 dark:text-zinc-200">Últimos partidos</h2>
+            {!proActive && (
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                Mostrando los últimos {visibleMatches.length} partidos (Plan Gratis)
+              </span>
+            )}
+          </div>
           <div className="flex flex-col gap-4">
-            {recentMatches.map((m) => {
+            {visibleMatches.map((m) => {
               const teamA = m.teams.filter((t) => t.team === "A");
               const teamB = m.teams.filter((t) => t.team === "B");
               const isWinnerA = m.result === "A";
@@ -273,6 +289,14 @@ export default async function GroupHistorialPage({
               );
             })}
           </div>
+          {!proActive && hiddenMatchesCount > 0 && (
+            <ProBanner
+              groupSlug={group.slug}
+              title={`Hay ${hiddenMatchesCount} partido(s) histórico(s) más en el archivo`}
+              description="Activá FulboMundial PRO para destrabar el archivo completo de partidos, votaciones históricas y métricas avanzadas."
+              ctaLabel="Desbloquear archivo completo"
+            />
+          )}
         </div>
       )}
     </div>

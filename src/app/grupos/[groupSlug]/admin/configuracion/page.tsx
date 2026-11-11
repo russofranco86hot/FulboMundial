@@ -1,4 +1,5 @@
 import { getGroupBySlug } from "@/lib/groups";
+import { isGroupPro } from "@/lib/billing";
 import { adminGroupSaveSettings } from "../actions";
 import { CheckCircle2, Settings, Trophy, Calendar, Users } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -20,7 +21,7 @@ export default async function GroupAdminConfigPage({
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <ProCard groupName={group.name} />
+      <ProCard groupName={group.name} groupSlug={group.slug} isPro={isGroupPro(group)} />
 
       {saved === "1" && (
         <div className="rounded-2xl bg-green-500/15 p-4 text-sm font-semibold text-green-800 dark:text-green-300 border border-green-500/30 flex items-center gap-3 shadow-glow-green">

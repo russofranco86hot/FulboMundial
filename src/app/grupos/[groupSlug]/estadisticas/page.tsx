@@ -1,5 +1,7 @@
 import { getGroupBySlug } from "@/lib/groups";
 import { getAdvancedStats } from "@/lib/stats";
+import { isGroupPro } from "@/lib/billing";
+import { ProBadge, ProBanner, ProLockOverlay } from "@/components/pro-gate";
 import {
   Handshake,
   Swords,
@@ -10,7 +12,6 @@ import {
   Skull,
   ZapOff,
   Flame,
-  ShieldAlert,
 } from "lucide-react";
 import { notFound } from "next/navigation";
 
@@ -25,22 +26,35 @@ export default async function GroupEstadisticasPage({
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();
 
+  const proActive = isGroupPro(group);
   const stats = await getAdvancedStats(group.id);
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-black text-pitch-800 dark:text-zinc-100 flex items-center gap-2">
-          <BarChart3 className="text-pitch-600" />
-          Métricas y Folclore — {group.name}
-        </h1>
-        <p className="text-sm text-pitch-900/60 dark:text-zinc-400 mt-1">
-          Sociedades, rivalidades, amuletos y las gastadas históricas del grupo.
-        </p>
-        <p className="text-xs text-pitch-900/50 dark:text-zinc-500 mt-0.5">
-          * Mínimo 3 partidos disputados y presencia activa en los últimos 5 encuentros.
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-black text-pitch-800 dark:text-zinc-100 flex items-center gap-2 flex-wrap">
+            <BarChart3 className="text-pitch-600" />
+            Métricas y Folclore — {group.name}
+            <ProBadge active={proActive} />
+          </h1>
+          <p className="text-sm text-pitch-900/60 dark:text-zinc-400 mt-1">
+            Sociedades, rivalidades, amuletos y las gastadas históricas del grupo.
+          </p>
+          <p className="text-xs text-pitch-900/50 dark:text-zinc-500 mt-0.5">
+            * Mínimo 3 partidos disputados y presencia activa en los últimos 5 encuentros.
+          </p>
+        </div>
       </div>
+
+      {!proActive && (
+        <ProBanner
+          groupSlug={group.slug}
+          title="Desbloqueá el Folclore Completo del Grupo"
+          description="El Amuleto y La Mufa son gratis. Pasate a PRO para ver Dúos Tóxicos, El Clásico, Química, Paternidad y Rachas."
+          ctaLabel="Desbloquear PRO"
+        />
+      )}
 
       {/* ─── El Amuleto y La Mufa (Grid de 2 columnas) ─── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -131,8 +145,10 @@ export default async function GroupEstadisticasPage({
         </div>
       </div>
 
-      {/* ─── Dúo Tóxico & El Clásico Picante ─── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <ProLockOverlay isPro={proActive} groupSlug={group.slug}>
+        <div className="space-y-6">
+          {/* ─── Dúo Tóxico & El Clásico Picante ─── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Dúo Tóxico (Anti-Química) */}
         <div className="card space-y-3 border-amber-500/30">
           <div className="flex items-center gap-2 border-b border-amber-500/20 pb-2 border-l-4 border-amber-500 pl-3">
@@ -315,6 +331,8 @@ export default async function GroupEstadisticasPage({
           </ul>
         </div>
       )}
+        </div>
+      </ProLockOverlay>
     </div>
   );
 }
