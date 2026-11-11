@@ -13,7 +13,14 @@
   "triggers": {
     "crons": ["0 2 * * 4", "0 15 * * 3", "0 21 * * 3"]
   },
+  "workers_dev": true,
   "vars": {
-    "APP_URL": "https://fulbomundial.com.ar"
-  }
+    "APP_URL": "https://fulbomundial.com.ar",
+    "NEXTAUTH_URL": "https://fulbomundial.com.ar",
+    "AUTH_TRUST_HOST": "true"
+  },
+  "routes": [
+    { "pattern": "fulbomundial.com.ar/*", "zone_name": "fulbomundial.com.ar" },
+    { "pattern": "www.fulbomundial.com.ar/*", "zone_name": "fulbomundial.com.ar" }
+  ]
 }
