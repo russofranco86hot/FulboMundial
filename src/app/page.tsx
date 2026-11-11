@@ -38,7 +38,7 @@ export default async function HomePage() {
           {[
             { icon: "📋", label: "Anotate al instante" },
             { icon: "⚖️", label: "Equipos balanceados" },
-            { icon: "🏆", label: "Historial y stats" },
+            { icon: "🏆", label: "Historial y estadísticas" },
           ].map((f) => (
             <div key={f.label} className="card p-3 space-y-2">
               <div className="text-2xl">{f.icon}</div>

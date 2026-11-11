@@ -30,7 +30,7 @@ export function BottomNav({ adminGroupSlugs = [] }: BottomNavProps) {
         { href: `/grupos/${groupSlug}`, exact: true, label: "Partido", icon: Home },
         { href: `/grupos/${groupSlug}/equipos`, label: "Equipos", icon: Users },
         { href: `/grupos/${groupSlug}/historial`, label: "Historial", icon: Trophy },
-        { href: `/grupos/${groupSlug}/estadisticas`, label: "Stats", icon: TrendingUp },
+        { href: `/grupos/${groupSlug}/estadisticas`, label: "Estadísticas", icon: TrendingUp },
         ...(isAdmin ? [{ href: `/grupos/${groupSlug}/admin`, label: "Admin", icon: Settings }] : []),
       ]
     : [

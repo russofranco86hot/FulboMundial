@@ -4,7 +4,7 @@ import { Sparkles, Mic, Camera, Flame, BellRing, Crown, MessageCircle, ArrowRigh
 const BENEFITS = [
   { icon: Mic, text: "Crónicas y audios de relator con IA ilimitados" },
   { icon: Camera, text: "Tácticas y tarjetas EA FC en HD con el nombre de tu grupo" },
-  { icon: Flame, text: "Stats folclóricas completas: Amuleto, Mufa, Dúos Tóxicos y Clásicos" },
+  { icon: Flame, text: "Estadísticas folclóricas completas: Amuleto, Mufa, Dúos Tóxicos y Clásicos" },
   { icon: BellRing, text: "Historial ilimitado y recordatorios automáticos a deudores" },
 ];
 

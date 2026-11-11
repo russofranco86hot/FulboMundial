@@ -76,13 +76,13 @@ export default async function GroupEstadisticasPage({
                 El Amuleto (Talismán) 🍀
               </h2>
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                Entra a la cancha y el equipo suma. Mayor % de victoria.
+                Entra a la cancha y el equipo suma. Efectividad positiva (&gt;50% de victorias).
               </p>
             </div>
           </div>
 
           {stats.talismans.length === 0 ? (
-            <p className="text-xs text-zinc-400 py-2">Sin jugadores con victorias suficientes aún.</p>
+            <p className="text-xs text-zinc-400 py-2">Aún no hay jugadores que superen el 50% de victorias.</p>
           ) : (
             <ul className="space-y-2">
               {stats.talismans.map((t, idx) => (
@@ -119,13 +119,13 @@ export default async function GroupEstadisticasPage({
                 El Salado (Mufa Oficial) 🧂
               </h2>
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                Pisa el césped y se nubla el día. Mayor % de derrotas.
+                Pisa el césped y se nubla el día. Más del 50% de derrotas.
               </p>
             </div>
           </div>
 
           {stats.mufas.length === 0 ? (
-            <p className="text-xs text-zinc-400 py-2">¡Nadie califica como mufa! No hay jugadores con derrotas marcadas.</p>
+            <p className="text-xs text-zinc-400 py-2">¡Nadie califica como mufa! Ningún jugador supera el 50% de derrotas.</p>
           ) : (
             <ul className="space-y-2">
               {stats.mufas.map((m, idx) => (

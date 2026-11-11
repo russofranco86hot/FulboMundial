@@ -96,7 +96,7 @@ export const getAdvancedStats = cache(async (groupId?: number) => {
   // Últimos 5 partidos del grupo para filtro de inactividad
   const last5Ids = new Set(allMatches.slice(0, 5).map((m) => m.id));
 
-  const chemistry: Record<string, { matches: number, wins: number, p1: string, p2: string }> = {};
+  const chemistry: Record<string, { matches: number, wins: number, losses: number, p1: string, p2: string }> = {};
   const paternity: Record<string, { matches: number, wins: number, p1: string, p2: string }> = {};
   const rivalPairs: Record<string, { p1: string; p2: string; matches: number; wins1: number; wins2: number; draws: number }> = {};
   const playerHistory: Record<number, { name: string, results: ("W"|"L"|"D")[], last5Count: number }> = {};
@@ -117,9 +117,10 @@ export const getAdvancedStats = cache(async (groupId?: number) => {
           const p1 = team[i];
           const p2 = team[j];
           const key = p1.id < p2.id ? `${p1.id}-${p2.id}` : `${p2.id}-${p1.id}`;
-          if (!chemistry[key]) chemistry[key] = { matches: 0, wins: 0, p1: p1.name, p2: p2.name };
+          if (!chemistry[key]) chemistry[key] = { matches: 0, wins: 0, losses: 0, p1: p1.name, p2: p2.name };
           chemistry[key].matches++;
           if (isWinner && !isDraw) chemistry[key].wins++;
+          else if (!isWinner && !isDraw) chemistry[key].losses++;
         }
       }
     };
@@ -182,6 +183,7 @@ export const getAdvancedStats = cache(async (groupId?: number) => {
   const topChemistry: PairStat[] = Object.entries(chemistry)
     .filter(([key, c]) => {
       if (c.matches < 3) return false;
+      if (c.wins <= c.losses || Math.round((c.wins / c.matches) * 100) <= 50) return false;
       if (activePlayerIds) {
         const [id1, id2] = key.split("-").map(Number);
         if (!activePlayerIds.has(id1) || !activePlayerIds.has(id2)) return false;
@@ -247,27 +249,21 @@ export const getAdvancedStats = cache(async (groupId?: number) => {
     if (winlessStreak >= 4) streaks.push({ playerId: Number(id), name: data.name, type: "winless", count: winlessStreak });
   }
 
-  // 1. Amuleto / Talismán: Los que más ganan cuando están en cancha (requiere al menos 1 victoria y >= 50% de efectividad)
-  const talismansCandidates = playerStatsList.filter((p) => p.wins > 0 && p.winPct >= 50);
-  const talismans = (
-    talismansCandidates.length > 0
-      ? talismansCandidates
-      : playerStatsList.filter((p) => p.wins > 0 && p.winPct > 0)
-  )
+  // 1. Amuleto / Talismán: Los que más ganan cuando están en cancha (requiere más victorias que derrotas y > 50% de efectividad)
+  const talismans = playerStatsList
+    .filter((p) => p.wins > p.losses && p.winPct > 50)
     .sort((a, b) => b.winPct - a.winPct || b.wins - a.wins || b.matches - a.matches)
     .slice(0, 6);
 
-  // 2. La Mufa / El Salado: Los que más pierden cuando están en cancha (requiere al menos 1 derrota y >= 50% de caídas)
-  const mufasCandidates = playerStatsList.filter((p) => p.losses > 0 && p.lossPct >= 50);
-  const mufas = (
-    mufasCandidates.length > 0
-      ? mufasCandidates
-      : playerStatsList.filter((p) => p.losses > 0 && p.lossPct > 0)
-  )
+  const talismanIds = new Set(talismans.map((t) => t.playerId));
+
+  // 2. La Mufa / El Salado: Los que más pierden cuando están en cancha (requiere más derrotas que victorias y > 50% de caídas)
+  const mufas = playerStatsList
+    .filter((p) => p.losses > p.wins && p.lossPct > 50 && !talismanIds.has(p.playerId))
     .sort((a, b) => b.lossPct - a.lossPct || b.losses - a.losses || b.matches - a.matches)
     .slice(0, 6);
 
-  // 3. Dúo Tóxico (Anti-Química): Parejas que cuando juegan juntas pierden al menos el 50% y tienen derrotas
+  // 3. Dúo Tóxico (Anti-Química): Parejas que cuando juegan juntas pierden más del 50% y tienen más derrotas que victorias
   const toxicDuos: ToxicPairStat[] = Object.entries(chemistry)
     .filter(([key, c]) => {
       if (c.matches < 3) return false;
@@ -275,19 +271,16 @@ export const getAdvancedStats = cache(async (groupId?: number) => {
         const [id1, id2] = key.split("-").map(Number);
         if (!activePlayerIds.has(id1) || !activePlayerIds.has(id2)) return false;
       }
-      const losses = c.matches - c.wins;
-      return losses > 0 && (losses / c.matches) >= 0.5;
+      const lossPct = Math.round((c.losses / c.matches) * 100);
+      return c.losses > c.wins && lossPct > 50;
     })
-    .map(([, c]) => {
-      const losses = c.matches - c.wins;
-      return {
-        player1: c.p1,
-        player2: c.p2,
-        matches: c.matches,
-        losses,
-        lossPct: Math.round((losses / c.matches) * 100),
-      };
-    })
+    .map(([, c]) => ({
+      player1: c.p1,
+      player2: c.p2,
+      matches: c.matches,
+      losses: c.losses,
+      lossPct: Math.round((c.losses / c.matches) * 100),
+    }))
     .sort((a, b) => b.lossPct - a.lossPct || b.matches - a.matches)
     .slice(0, 6);
 

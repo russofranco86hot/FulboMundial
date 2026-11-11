@@ -18,7 +18,7 @@ export default function GroupNav({ group, role }: GroupNavProps) {
     { href: base, label: "Inicio", icon: Home },
     { href: `${base}/equipos`, label: "Equipos", icon: Users },
     { href: `${base}/historial`, label: "Historial", icon: Trophy },
-    { href: `${base}/estadisticas`, label: "Stats", icon: TrendingUp },
+    { href: `${base}/estadisticas`, label: "Estadísticas", icon: TrendingUp },
     ...(role === "admin" ? [{ href: `${base}/admin`, label: "Admin", icon: Settings }] : []),
   ];
 
