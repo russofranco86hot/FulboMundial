@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fulbomundial",
+  "main": "worker.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": { "enabled": true },
+  // Reemplazan a vercel.json "crons" (horarios en UTC, igual que en Vercel)
+  "triggers": {
+    "crons": ["0 2 * * 4", "0 15 * * 3", "0 21 * * 3"]
+  },
+  "vars": {
+    "APP_URL": "https://fulbomundial.com.ar"
+  }
+}
