@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { db, matches, results, teams, players } from "@/db";
 import { and, desc, eq, sql } from "drizzle-orm";
 
@@ -53,7 +54,7 @@ export type StreakStat = {
   count: number;
 };
 
-export async function getAdvancedStats(groupId?: number) {
+export const getAdvancedStats = cache(async (groupId?: number) => {
   let targetGroupId = groupId;
   if (!targetGroupId) {
     const { groups } = await import("@/db/schema");
@@ -66,30 +67,28 @@ export async function getAdvancedStats(groupId?: number) {
     ? and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"))
     : eq(matches.status, "finished");
 
-  const allMatches = await db
-    .select({
-      id: matches.id,
-      matchDate: matches.matchDate,
-      result: results.result,
-    })
-    .from(matches)
-    .innerJoin(results, eq(matches.id, results.matchId))
-    .where(whereMatch)
-    .orderBy(desc(matches.matchDate));
-
-  const allTeams = await db
-    .select({ matchId: teams.matchId, playerId: teams.playerId, team: teams.team, name: players.name })
-    .from(teams)
-    .innerJoin(players, eq(players.id, teams.playerId))
-    .where(sql`${teams.playerId} IS NOT NULL`);
-
-  // IDs de partidos del grupo (para filtrar teams)
-  const groupMatchIds = new Set(allMatches.map((m) => m.id));
+  const [allMatches, allTeams] = await Promise.all([
+    db
+      .select({
+        id: matches.id,
+        matchDate: matches.matchDate,
+        result: results.result,
+      })
+      .from(matches)
+      .innerJoin(results, eq(matches.id, results.matchId))
+      .where(whereMatch)
+      .orderBy(desc(matches.matchDate)),
+    db
+      .select({ matchId: teams.matchId, playerId: teams.playerId, team: teams.team, name: players.name })
+      .from(teams)
+      .innerJoin(matches, eq(matches.id, teams.matchId))
+      .innerJoin(players, eq(players.id, teams.playerId))
+      .where(and(sql`${teams.playerId} IS NOT NULL`, whereMatch)),
+  ]);
 
   // Build match rosters (solo del grupo)
   const matchRosters: Record<number, { A: {id: number, name: string}[], B: {id: number, name: string}[] }> = {};
   for (const t of allTeams) {
-    if (!groupMatchIds.has(t.matchId)) continue;
     if (!matchRosters[t.matchId]) matchRosters[t.matchId] = { A: [], B: [] };
     matchRosters[t.matchId][t.team as "A"|"B"].push({ id: t.playerId!, name: t.name });
   }
@@ -322,4 +321,4 @@ export async function getAdvancedStats(groupId?: number) {
     toxicDuos,
     classicRivals,
   };
-}
+});

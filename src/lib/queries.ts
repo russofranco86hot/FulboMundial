@@ -1,6 +1,7 @@
 import "server-only";
-import { db, matches, signups, players, teams, results, type Match, type Player } from "@/db";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { cache } from "react";
+import { db, matches, signups, players, teams, results, matchVotes, type Match, type Player } from "@/db";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { computeSelection, type SelectionRow } from "./selection";
 
 /** Filas crudas necesarias para resolver una query .execute() en neon-http. */
@@ -11,7 +12,7 @@ function rowsOf<T = Record<string, unknown>>(res: unknown): T[] {
 }
 
 /** Partido vigente de un grupo: el que está abierto/cerrado más próximo; si no, el último. */
-export async function getCurrentMatch(groupId?: number): Promise<Match | null> {
+export const getCurrentMatch = cache(async (groupId?: number): Promise<Match | null> => {
   let targetGroupId = groupId;
   if (!targetGroupId) {
     const { groups } = await import("@/db/schema");
@@ -43,7 +44,7 @@ export async function getCurrentMatch(groupId?: number): Promise<Match | null> {
     .orderBy(desc(matches.matchDate))
     .limit(1);
   return last[0] ?? null;
-}
+});
 
 export type SignupWithPlayer = {
   playerId: number;
@@ -117,7 +118,7 @@ export type StandingRow = {
  * Tabla histórica del grupo: PJ/G/E/P + bajas.
  * Filtra jugadores que no hayan participado en ninguno de los últimos 5 partidos finalizados.
  */
-export async function getStandings(groupId?: number): Promise<StandingRow[]> {
+export const getStandings = cache(async (groupId?: number): Promise<StandingRow[]> => {
   let targetGroupId = groupId;
   if (!targetGroupId) {
     const { groups } = await import("@/db/schema");
@@ -127,115 +128,95 @@ export async function getStandings(groupId?: number): Promise<StandingRow[]> {
     if (g) targetGroupId = g.id;
   }
 
-  let ptsWin = 3;
-  let ptsDraw = 2;
-  let ptsLoss = 1;
-
-  if (targetGroupId) {
-    const { groups } = await import("@/db/schema");
-    const grp = (
-      await db
-        .select({
-          ptsWin: groups.ptsWin,
-          ptsDraw: groups.ptsDraw,
-          ptsLoss: groups.ptsLoss,
-        })
-        .from(groups)
-        .where(eq(groups.id, targetGroupId))
-        .limit(1)
-    )[0];
-    if (grp) {
-      ptsWin = grp.ptsWin ?? 3;
-      ptsDraw = grp.ptsDraw ?? 2;
-      ptsLoss = grp.ptsLoss ?? 1;
-    }
-  }
-
-  // 1. Obtener la tabla base (estadísticas raw) — solo miembros del grupo
-  const res = await db.execute(sql`
-    WITH wld AS (
-      SELECT
-        t.player_id AS player_id,
-        COUNT(*) FILTER (WHERE r.result::text = t.team::text) AS won,
-        COUNT(*) FILTER (WHERE r.result::text = 'draw') AS drawn,
-        COUNT(*) FILTER (WHERE r.result::text <> 'draw' AND r.result::text <> t.team::text) AS lost,
-        COUNT(*) AS gp
-      FROM ${teams} t
-      JOIN ${results} r ON r.match_id = t.match_id
-      JOIN ${matches} m ON m.id = t.match_id
-      WHERE t.player_id IS NOT NULL
-        AND (${targetGroupId}::int IS NULL OR m.group_id = ${targetGroupId})
-      GROUP BY t.player_id
-    ),
-    drops AS (
-      SELECT s.player_id, COUNT(*) AS dropouts
-      FROM ${signups} s
-      JOIN ${matches} m ON m.id = s.match_id
-      WHERE s.withdrawn = true AND (${targetGroupId}::int IS NULL OR m.group_id = ${targetGroupId})
-      GROUP BY s.player_id
-    )
-    SELECT
-      p.id AS player_id,
-      p.name AS name,
-      GREATEST(COALESCE(w.won, 0) + p.adj_won, 0) AS won,
-      GREATEST(COALESCE(w.drawn, 0) + p.adj_drawn, 0) AS drawn,
-      GREATEST(COALESCE(w.lost, 0) + p.adj_lost, 0) AS lost,
-      COALESCE(d.dropouts, 0) AS dropouts,
-      p.adj_won,
-      p.adj_drawn,
-      p.adj_lost
-    FROM ${players} p
-    LEFT JOIN "group_members" gm ON gm.player_id = p.id AND (${targetGroupId}::int IS NULL OR gm.group_id = ${targetGroupId}) AND gm.status = 'active'
-    LEFT JOIN wld w ON w.player_id = p.id
-    LEFT JOIN drops d ON d.player_id = p.id
-    WHERE p.is_guest = false
-      AND (${targetGroupId}::int IS NULL OR gm.player_id IS NOT NULL)
-    ORDER BY (COALESCE(w.won, 0) + p.adj_won) DESC, p.name ASC
-  `);
-
-  // 2. Últimos 5 partidos finalizados del grupo
   const whereFinished = targetGroupId
     ? and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"))
     : eq(matches.status, "finished");
 
-  const last5 = await db
-    .select({
-      id: matches.id,
-      matchDate: matches.matchDate,
-      result: results.result,
-    })
-    .from(matches)
-    .innerJoin(results, eq(matches.id, results.matchId))
-    .where(whereFinished)
-    .orderBy(desc(matches.matchDate))
-    .limit(5);
+  const { groups } = await import("@/db/schema");
 
-  // 3. Todos los partidos finalizados del grupo (para badges y form)
-  const allMatches = await db
-    .select({
-      id: matches.id,
-      matchDate: matches.matchDate,
-      result: results.result,
-    })
-    .from(matches)
-    .innerJoin(results, eq(matches.id, results.matchId))
-    .where(whereFinished)
-    .orderBy(desc(matches.matchDate));
+  // Ejecutar consultas en paralelo y filtrando equipos únicamente por partidos del grupo
+  const [grpRow, res, allMatches, allTeams] = await Promise.all([
+    targetGroupId
+      ? db
+          .select({
+            ptsWin: groups.ptsWin,
+            ptsDraw: groups.ptsDraw,
+            ptsLoss: groups.ptsLoss,
+          })
+          .from(groups)
+          .where(eq(groups.id, targetGroupId))
+          .limit(1)
+          .then((r) => r[0] ?? null)
+      : Promise.resolve(null),
+    db.execute(sql`
+      WITH wld AS (
+        SELECT
+          t.player_id AS player_id,
+          COUNT(*) FILTER (WHERE r.result::text = t.team::text) AS won,
+          COUNT(*) FILTER (WHERE r.result::text = 'draw') AS drawn,
+          COUNT(*) FILTER (WHERE r.result::text <> 'draw' AND r.result::text <> t.team::text) AS lost,
+          COUNT(*) AS gp
+        FROM ${teams} t
+        JOIN ${results} r ON r.match_id = t.match_id
+        JOIN ${matches} m ON m.id = t.match_id
+        WHERE t.player_id IS NOT NULL
+          AND (${targetGroupId}::int IS NULL OR m.group_id = ${targetGroupId})
+        GROUP BY t.player_id
+      ),
+      drops AS (
+        SELECT s.player_id, COUNT(*) AS dropouts
+        FROM ${signups} s
+        JOIN ${matches} m ON m.id = s.match_id
+        WHERE s.withdrawn = true AND (${targetGroupId}::int IS NULL OR m.group_id = ${targetGroupId})
+        GROUP BY s.player_id
+      )
+      SELECT
+        p.id AS player_id,
+        p.name AS name,
+        GREATEST(COALESCE(w.won, 0) + p.adj_won, 0) AS won,
+        GREATEST(COALESCE(w.drawn, 0) + p.adj_drawn, 0) AS drawn,
+        GREATEST(COALESCE(w.lost, 0) + p.adj_lost, 0) AS lost,
+        COALESCE(d.dropouts, 0) AS dropouts,
+        p.adj_won,
+        p.adj_drawn,
+        p.adj_lost
+      FROM ${players} p
+      LEFT JOIN "group_members" gm ON gm.player_id = p.id AND (${targetGroupId}::int IS NULL OR gm.group_id = ${targetGroupId}) AND gm.status = 'active'
+      LEFT JOIN wld w ON w.player_id = p.id
+      LEFT JOIN drops d ON d.player_id = p.id
+      WHERE p.is_guest = false
+        AND (${targetGroupId}::int IS NULL OR gm.player_id IS NOT NULL)
+      ORDER BY (COALESCE(w.won, 0) + p.adj_won) DESC, p.name ASC
+    `),
+    db
+      .select({
+        id: matches.id,
+        matchDate: matches.matchDate,
+        result: results.result,
+      })
+      .from(matches)
+      .innerJoin(results, eq(matches.id, results.matchId))
+      .where(whereFinished)
+      .orderBy(desc(matches.matchDate)),
+    db
+      .select({ matchId: teams.matchId, playerId: teams.playerId, team: teams.team })
+      .from(teams)
+      .innerJoin(matches, eq(matches.id, teams.matchId))
+      .where(and(sql`${teams.playerId} IS NOT NULL`, whereFinished)),
+  ]);
 
-  const allTeams = await db
-    .select({ matchId: teams.matchId, playerId: teams.playerId, team: teams.team })
-    .from(teams)
-    .where(sql`${teams.playerId} IS NOT NULL`);
+  const ptsWin = grpRow?.ptsWin ?? 3;
+  const ptsDraw = grpRow?.ptsDraw ?? 2;
+  const ptsLoss = grpRow?.ptsLoss ?? 1;
 
-  // Agrupar equipos por partido
+  const last5 = allMatches.slice(0, 5);
+
+  // Agrupar equipos por partido (solo del grupo)
   const teamsByMatch = allTeams.reduce((acc, t) => {
     if (!acc[t.matchId]) acc[t.matchId] = { A: [], B: [] };
     if (t.playerId) acc[t.matchId][t.team as "A"|"B"].push(t.playerId);
     return acc;
   }, {} as Record<number, { A: number[], B: number[] }>);
-
-  // IDs de los últimos 5 partidos
-  const last5Ids = new Set(last5.map((m) => m.id));
 
   const rows = rowsOf<Record<string, unknown>>(res).map((r) => {
     const pid = Number(r.player_id);
@@ -245,20 +226,16 @@ export async function getStandings(groupId?: number): Promise<StandingRow[]> {
     const gp = won + drawn + lost;
     const winPct = gp > 0 ? Math.round((won / gp) * 100) : 0;
 
-    // Filtro de inactividad: si hay partidos finalizados y el jugador no participó
-    // en ninguno de los últimos 5 (o de los que haya hasta 5), se oculta de la tabla.
-    // Si vuelve a jugar en un futuro partido, reaparece con todo su histórico.
     if (last5.length > 0) {
       const playedInLast5 = last5.some((m) => {
         const mTeams = teamsByMatch[m.id];
         return mTeams && (mTeams.A.includes(pid) || mTeams.B.includes(pid));
       });
-      if (!playedInLast5) return null; // no participó en ninguno de los últimos 5
+      if (!playedInLast5) return null;
     }
 
     const badges: string[] = [];
 
-    // 🔥 Asistencia Perfecta: jugó los últimos 4 partidos
     if (allMatches.length >= 4) {
       const playedLast4 = allMatches.slice(0, 4).every((m) => {
         const mTeams = teamsByMatch[m.id];
@@ -267,10 +244,8 @@ export async function getStandings(groupId?: number): Promise<StandingRow[]> {
       if (playedLast4) badges.push("🔥");
     }
 
-    // 🍀 Talismán: WinPct > 70% con al menos 5 partidos
     if (gp >= 5 && winPct >= 70) badges.push("🍀");
 
-    // ⚔️ Clásico
     const opponentsCount: Record<number, number> = {};
     const matchups: Record<number, "W"|"L"|"D"> = {};
     const form: ("W"|"D"|"L")[] = [];
@@ -294,10 +269,16 @@ export async function getStandings(groupId?: number): Promise<StandingRow[]> {
       }
     }
 
-    if (Object.keys(opponentsCount).length > 0) {
-      const biggestRivalId = Object.entries(opponentsCount)
-        .sort((a, b) => b[1] - a[1])[0][0];
-      if (matchups[Number(biggestRivalId)] === "W") badges.push("⚔️");
+    let biggestRivalId = 0;
+    let maxRivalCount = 0;
+    for (const [opIdStr, cnt] of Object.entries(opponentsCount)) {
+      if (cnt > maxRivalCount) {
+        maxRivalCount = cnt;
+        biggestRivalId = Number(opIdStr);
+      }
+    }
+    if (biggestRivalId > 0 && matchups[biggestRivalId] === "W") {
+      badges.push("⚔️");
     }
 
     const pts = (won * ptsWin) + (drawn * ptsDraw) + (lost * ptsLoss);
@@ -317,11 +298,10 @@ export async function getStandings(groupId?: number): Promise<StandingRow[]> {
     };
   });
 
-  // Filtrar nulls (inactivos) y ordenar
   return (rows.filter(Boolean) as StandingRow[]).sort(
     (a, b) => b.pts - a.pts || a.name.localeCompare(b.name)
   );
-}
+});
 
 /** Equipos cargados para un partido (con nombre del jugador o invitado). */
 export async function getMatchTeams(matchId: number) {
@@ -438,45 +418,104 @@ export async function getRecentMatches(groupId?: number, limitN = 5) {
     .orderBy(desc(matches.matchDate))
     .limit(limitN);
 
-  const withTeams = await Promise.all(
-    recent.map(async (m) => {
-      const t = await getMatchTeams(m.id);
-      const v = await getMatchVotes(m.id);
+  if (recent.length === 0) return [];
 
-      const voteCounts: Record<string, Record<number, number>> = { mvp: {}, tronco: {}, gol: {} };
-      for (const vote of v) {
-        if (!voteCounts[vote.categoryId]) voteCounts[vote.categoryId] = {};
-        if (vote.candidateId) {
-          voteCounts[vote.categoryId][vote.candidateId] = (voteCounts[vote.categoryId][vote.candidateId] || 0) + 1;
-        }
+  const matchIds = recent.map((m) => m.id);
+
+  // Batch fetch de equipos y votos en 2 consultas en lugar de 2*N consultas
+  const [allTeamsRows, allVotesRows] = await Promise.all([
+    db
+      .select({
+        id: teams.id,
+        matchId: teams.matchId,
+        team: teams.team,
+        playerId: teams.playerId,
+        guestName: teams.guestName,
+        isGuest: teams.isGuest,
+        name: players.name,
+        stars: players.stars,
+        isGoalkeeper: players.isGoalkeeper,
+        preferredPosition: players.preferredPosition,
+        preferredFoot: players.preferredFoot,
+      })
+      .from(teams)
+      .leftJoin(players, eq(players.id, teams.playerId))
+      .where(inArray(teams.matchId, matchIds)),
+    db
+      .select({
+        id: matchVotes.id,
+        matchId: matchVotes.matchId,
+        categoryId: matchVotes.categoryId,
+        voterId: matchVotes.voterId,
+        candidateId: matchVotes.candidateId,
+      })
+      .from(matchVotes)
+      .where(inArray(matchVotes.matchId, matchIds))
+      .catch(() => []),
+  ]);
+
+  const teamsByMatch = new Map<number, typeof allTeamsRows>();
+  for (const r of allTeamsRows) {
+    if (!((r.name && r.name.trim() !== "") || (r.guestName && r.guestName.trim() !== ""))) continue;
+    const arr = teamsByMatch.get(r.matchId) ?? [];
+    arr.push(r);
+    teamsByMatch.set(r.matchId, arr);
+  }
+
+  const votesByMatch = new Map<number, typeof allVotesRows>();
+  for (const v of allVotesRows) {
+    const arr = votesByMatch.get(v.matchId) ?? [];
+    arr.push(v);
+    votesByMatch.set(v.matchId, arr);
+  }
+
+  return recent.map((m) => {
+    const rawTeams = teamsByMatch.get(m.id) ?? [];
+    const v = votesByMatch.get(m.id) ?? [];
+
+    const voteCounts: Record<string, Record<number, number>> = { mvp: {}, tronco: {}, gol: {} };
+    for (const vote of v) {
+      if (!voteCounts[vote.categoryId]) voteCounts[vote.categoryId] = {};
+      if (vote.candidateId) {
+        voteCounts[vote.categoryId][vote.candidateId] = (voteCounts[vote.categoryId][vote.candidateId] || 0) + 1;
       }
+    }
 
-      const winners: Record<string, number[]> = { mvp: [], tronco: [], gol: [] };
-      for (const category of ["mvp", "tronco", "gol"]) {
-        const counts = voteCounts[category];
-        if (!counts || Object.keys(counts).length === 0) continue;
-        const maxVotes = Math.max(...Object.values(counts));
-        if (maxVotes > 0) {
-          winners[category] = Object.keys(counts)
-            .map(Number)
-            .filter((id) => counts[id] === maxVotes);
-        }
+    const winners: Record<string, number[]> = { mvp: [], tronco: [], gol: [] };
+    for (const category of ["mvp", "tronco", "gol"]) {
+      const counts = voteCounts[category];
+      if (!counts || Object.keys(counts).length === 0) continue;
+      const maxVotes = Math.max(...Object.values(counts));
+      if (maxVotes > 0) {
+        winners[category] = Object.keys(counts)
+          .map(Number)
+          .filter((id) => counts[id] === maxVotes);
       }
+    }
 
-      const teamsWithAwards = t.map((player) => {
-        const awards: string[] = [];
-        if (player.playerId) {
-          if (winners.mvp.includes(player.playerId)) awards.push("🥇");
-          if (winners.tronco.includes(player.playerId)) awards.push("🪵");
-          if (winners.gol.includes(player.playerId)) awards.push("⚽");
-        }
-        return { ...player, awards };
-      });
+    const teamsWithAwards = rawTeams.map((r) => {
+      const awards: string[] = [];
+      if (r.playerId) {
+        if (winners.mvp.includes(r.playerId)) awards.push("🥇");
+        if (winners.tronco.includes(r.playerId)) awards.push("🪵");
+        if (winners.gol.includes(r.playerId)) awards.push("⚽");
+      }
+      return {
+        id: r.id,
+        team: r.team,
+        playerId: r.playerId,
+        name: r.name ?? r.guestName ?? "Invitado",
+        stars: Number(r.stars) || 0,
+        isGoalkeeper: !!r.isGoalkeeper,
+        isGuest: r.isGuest,
+        preferredPosition: r.preferredPosition ?? "MED",
+        preferredFoot: r.preferredFoot ?? "R",
+        awards,
+      };
+    });
 
-      return { ...m, teams: teamsWithAwards };
-    })
-  );
-  return withTeams;
+    return { ...m, teams: teamsWithAwards };
+  });
 }
 
 export async function getMatchDetails(matchId: number) {

@@ -8,6 +8,7 @@ import { getGroupMembers } from "@/lib/groups";
 let tableChecked = false;
 
 export async function ensurePlayerCommentsTable() {
+  if (process.env.RUN_DB_MIGRATIONS !== "true") return;
   if (tableChecked) return;
   try {
     await db.execute(sql`
@@ -117,70 +118,49 @@ export type PlayerCommentItem = {
 
 /**
  * Obtiene el comentario actual para un jugador específico en un grupo.
- * Si no tiene uno guardado, genera uno automáticamente y lo persiste.
+ * Si no tiene uno guardado, calcula un comentario ligero en memoria sin bloquear el render.
  */
-export async function getPlayerComment(groupId: number, playerId: number): Promise<string> {
-  await ensurePlayerCommentsTable();
-
-  let savedComment: string | undefined;
+export async function getPlayerComment(
+  groupId: number,
+  playerId: number,
+  fallback?: {
+    playerName?: string;
+    isGoalkeeper?: boolean;
+    standing?: {
+      pts: number;
+      won: number;
+      drawn: number;
+      lost: number;
+      gp: number;
+      winPct: number;
+      badges: string[];
+      form: ("W" | "D" | "L")[];
+    };
+    rank?: number;
+    totalRanked?: number;
+  }
+): Promise<string> {
   try {
     const res = await db.execute(sql`
       SELECT comment FROM group_player_comments
       WHERE group_id = ${groupId} AND player_id = ${playerId}
       LIMIT 1
     `);
-    savedComment = (res.rows[0] as { comment?: string } | undefined)?.comment;
+    const savedComment = (res.rows[0] as { comment?: string } | undefined)?.comment;
+    if (savedComment) {
+      return savedComment;
+    }
   } catch (err) {
     console.warn("Could not read from group_player_comments, using dynamic default:", err);
   }
 
-  if (savedComment) {
-    return savedComment;
-  }
-
-  // Generar comentario por defecto
-  const standings = await getStandings(groupId);
-  const advStats = await getAdvancedStats(groupId);
-
-  const idx = standings.findIndex((s) => s.playerId === playerId);
-  const st = idx !== -1 ? standings[idx] : undefined;
-  const rank = idx !== -1 ? idx + 1 : undefined;
-
-  const playerRow = (
-    await db
-      .select({ name: players.name, isGoalkeeper: players.isGoalkeeper })
-      .from(players)
-      .where(eq(players.id, playerId))
-      .limit(1)
-  )[0];
-
-  const streak = advStats.streaks.find((s) => s.playerId === playerId);
-  const winStreak = streak?.type === "win" ? streak.count : 0;
-  const winlessStreak = streak?.type === "winless" ? streak.count : 0;
-
-  const comment = computeDefaultPlayerComment({
-    playerName: playerRow?.name ?? "Jugador",
-    isGoalkeeper: !!playerRow?.isGoalkeeper,
-    standing: st,
-    rank,
-    totalRanked: standings.length,
-    winStreak,
-    winlessStreak,
+  return computeDefaultPlayerComment({
+    playerName: fallback?.playerName ?? "Jugador",
+    isGoalkeeper: !!fallback?.isGoalkeeper,
+    standing: fallback?.standing,
+    rank: fallback?.rank,
+    totalRanked: fallback?.totalRanked ?? 10,
   });
-
-  // Guardar en la base de datos
-  try {
-    await db.execute(sql`
-      INSERT INTO group_player_comments (group_id, player_id, comment, updated_at)
-      VALUES (${groupId}, ${playerId}, ${comment}, NOW())
-      ON CONFLICT (group_id, player_id) DO UPDATE
-      SET comment = ${comment}, updated_at = NOW()
-    `);
-  } catch (e) {
-    console.warn("Could not save initial player comment:", e);
-  }
-
-  return comment;
 }
 
 /**

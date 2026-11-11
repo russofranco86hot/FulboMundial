@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { db, players, groupMembers, groups, type Player, type Group } from "@/db";
 import { eq, or, and, sql } from "drizzle-orm";
@@ -14,6 +15,14 @@ export type SessionUser = {
 
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   try {
+    const cookieStore = await cookies();
+    const hasSessionCookie =
+      cookieStore.has("__Secure-authjs.session-token") ||
+      cookieStore.has("authjs.session-token") ||
+      cookieStore.has("__Secure-next-auth.session-token") ||
+      cookieStore.has("next-auth.session-token");
+    if (!hasSessionCookie) return null;
+
     const session = await auth();
     if (!session?.user) return null;
     return session.user as SessionUser;
@@ -111,9 +120,9 @@ export const getCurrentPlayer = cache(async (): Promise<Player | null> => {
  * Devuelve el rol del jugador actual en el grupo dado.
  * Retorna null si no es miembro activo.
  */
-export async function getPlayerGroupRole(
+export const getPlayerGroupRole = cache(async (
   groupId: number
-): Promise<"admin" | "member" | null> {
+): Promise<"admin" | "member" | null> => {
   try {
     const player = await getCurrentPlayer();
     if (!player) return null;
@@ -151,7 +160,7 @@ export async function getPlayerGroupRole(
     console.error("[getPlayerGroupRole] Error:", err);
     return null;
   }
-}
+});
 
 /**
  * Verifica si el jugador actual es admin del grupo.

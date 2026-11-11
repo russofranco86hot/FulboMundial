@@ -2,6 +2,7 @@
  * lib/groups.ts — helpers de creación y gestión de grupos.
  */
 import "server-only";
+import { cache } from "react";
 import { db, groups, groupMembers, joinRequests, players, matches, type Group } from "@/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 
@@ -102,12 +103,10 @@ export async function createGroup(opts: {
 }
 
 /** Busca un grupo por slug. */
-export async function getGroupBySlug(slug: string): Promise<Group | null> {
-  const { ensureDbUpgrades } = await import("./db-migrations");
-  await ensureDbUpgrades();
+export const getGroupBySlug = cache(async (slug: string): Promise<Group | null> => {
   const rows = await db.select().from(groups).where(eq(groups.slug, slug)).limit(1);
   return rows[0] ?? null;
-}
+});
 
 /** Busca un grupo por código de invitación. */
 export async function getGroupByInviteCode(code: string): Promise<Group | null> {

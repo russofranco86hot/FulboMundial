@@ -31,19 +31,28 @@ export default async function GroupHomePage({
   const player = await getCurrentPlayer();
   if (!player) return null; // Layout ya maneja el acceso
 
-  const standings = await getStandings(group.id);
+  const [standings, lastFinished, match] = await Promise.all([
+    getStandings(group.id),
+    getLastFinishedMatch(group.id),
+    getCurrentMatch(group.id),
+  ]);
+
   const topPts = standings[0]?.pts ?? 0;
   const topPlayers = standings.filter((s) => s.pts === topPts && s.pts > 0);
-  const lastFinished = await getLastFinishedMatch(group.id);
-  const playerComment = await getPlayerComment(group.id, player.id);
   const playerStanding = standings.find((s) => s.playerId === player.id);
   const rankIndex = standings.findIndex((s) => s.playerId === player.id);
   const playerRank = rankIndex !== -1 ? rankIndex + 1 : undefined;
 
+  const playerComment = await getPlayerComment(group.id, player.id, {
+    playerName: player.name,
+    isGoalkeeper: player.isGoalkeeper,
+    standing: playerStanding,
+    rank: playerRank,
+    totalRanked: standings.length,
+  });
+
   const lastFinishedTeamAName = lastFinished?.teamAName || group.teamAName || "Claro";
   const lastFinishedTeamBName = lastFinished?.teamBName || group.teamBName || "Oscuro";
-
-  const match = await getCurrentMatch(group.id);
 
   if (!match) {
     return (
@@ -90,28 +99,29 @@ export default async function GroupHomePage({
     );
   }
 
-  const selection = await getSelection(match);
+  const isOpen = match.status === "open";
+  const isFinished = match.status === "finished";
+
+  const [selection, currentResult, thirdHalfRows, weather, paymentConfig] = await Promise.all([
+    getSelection(match),
+    isFinished
+      ? db.select().from(results).where(eq(results.matchId, match.id)).limit(1).then((r) => r[0] ?? null)
+      : Promise.resolve(null),
+    db
+      .select({ name: players.name, staying: matchThirdHalf.staying, playerId: players.id })
+      .from(matchThirdHalf)
+      .innerJoin(players, eq(players.id, matchThirdHalf.playerId))
+      .where(eq(matchThirdHalf.matchId, match.id)),
+    getMatchWeather(match.matchDate),
+    getMatchPaymentConfig(match.id),
+  ]);
+
   const mine = selection.find((s) => s.playerId === player.id);
   const playing = selection.filter((s) => s.status === "playing");
   const subs = selection.filter((s) => s.status === "substitute");
-  const isOpen = match.status === "open";
-  const isFinished = match.status === "finished";
   const signedUp = !!mine;
-
-  const currentResult = isFinished
-    ? (await db.select().from(results).where(eq(results.matchId, match.id)).limit(1))[0]
-    : null;
-
-  const thirdHalfRows = await db
-    .select({ name: players.name, staying: matchThirdHalf.staying, playerId: players.id })
-    .from(matchThirdHalf)
-    .innerJoin(players, eq(players.id, matchThirdHalf.playerId))
-    .where(eq(matchThirdHalf.matchId, match.id));
-
   const myResponse = thirdHalfRows.find((r) => r.playerId === player.id)?.staying ?? null;
 
-  const weather = await getMatchWeather(match.matchDate);
-  const paymentConfig = await getMatchPaymentConfig(match.id);
   const playerPaymentsList = paymentConfig ? await getMatchPlayerPayments(match.id) : [];
   const myPayment = playerPaymentsList.find((p) => p.playerId === player.id) ?? null;
   const paidCount = playerPaymentsList.filter((p) => p.paid).length;

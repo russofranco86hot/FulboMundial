@@ -51,6 +51,7 @@ export function BottomNav({ adminGroupSlugs = [] }: BottomNavProps) {
             <Link
               key={it.href}
               href={it.href}
+              prefetch={false}
               className={`relative flex flex-1 flex-col items-center gap-1 py-3 text-[10px] sm:text-xs transition-colors ${
                 active ? "text-pitch-600 dark:text-pitch-400 font-bold" : "text-slate-400 dark:text-zinc-500 font-medium"
               }`}

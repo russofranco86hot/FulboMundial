@@ -48,6 +48,7 @@ export default function GroupNav({ group, role }: GroupNavProps) {
             <Link
               key={tab.href}
               href={tab.href}
+              prefetch={false}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
                 isActive
                   ? "bg-pitch-600 text-white shadow-sm"

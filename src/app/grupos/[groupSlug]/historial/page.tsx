@@ -22,14 +22,16 @@ export default async function GroupHistorialPage({
   if (!group) return notFound();
 
   const proActive = isGroupPro(group);
-  const rows = await getStandings(group.id);
-  const recentMatches = await getRecentMatches(group.id, proActive ? 50 : 10);
+  const [rows, recentMatches, topScorers, isAdmin] = await Promise.all([
+    getStandings(group.id),
+    getRecentMatches(group.id, proActive ? 30 : 10),
+    getGroupTopScorers(group.id),
+    isGroupAdmin(group.id),
+  ]);
   const visibleMatches = proActive
     ? recentMatches
     : recentMatches.slice(0, FREE_LIMITS.maxRecentMatchesInHistory);
   const hiddenMatchesCount = Math.max(0, recentMatches.length - visibleMatches.length);
-  const topScorers = await getGroupTopScorers(group.id);
-  const isAdmin = await isGroupAdmin(group.id);
 
   return (
     <div className="space-y-6 animate-fade-in">

@@ -7,7 +7,7 @@ import { formatArt } from "@/lib/time";
 import Link from "next/link";
 import { PlusCircle, LogIn, ChevronRight, Calendar, Users, Shield, User, Crown } from "lucide-react";
 import { db, matches, results, groups } from "@/db";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { ensureDbUpgrades } from "@/lib/db-migrations";
 import { isSuperAdmin } from "@/lib/superadmin";
 import { isGroupPro } from "@/lib/billing";
@@ -73,8 +73,37 @@ export default async function GruposPage() {
     getPlayerGroups(),
     isSuperAdmin(),
   ]);
-  const primaryComment =
-    playerGroups.length > 0 ? await getPlayerComment(playerGroups[0].id, player.id) : null;
+
+  const groupIds = playerGroups.map((g) => g.id);
+
+  const [primaryComment, openMatchesRows] =
+    groupIds.length > 0
+      ? await Promise.all([
+          getPlayerComment(playerGroups[0].id, player.id, {
+            playerName: player.name,
+            isGoalkeeper: player.isGoalkeeper,
+          }),
+          db
+            .select({
+              id: matches.id,
+              groupId: matches.groupId,
+              matchDate: matches.matchDate,
+              status: matches.status,
+              capacity: matches.capacity,
+              format: matches.format,
+            })
+            .from(matches)
+            .where(and(inArray(matches.groupId, groupIds), sql`${matches.status} <> 'finished'`))
+            .orderBy(matches.matchDate),
+        ])
+      : [null, []];
+
+  const openMatchByGroup = new Map<number, (typeof openMatchesRows)[0]>();
+  for (const m of openMatchesRows) {
+    if (m.groupId && !openMatchByGroup.has(m.groupId)) {
+      openMatchByGroup.set(m.groupId, m);
+    }
+  }
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -138,7 +167,11 @@ export default async function GruposPage() {
         <>
           <div className="space-y-3">
             {playerGroups.map((group) => (
-              <GroupCard key={group.id} group={group} />
+              <GroupCard
+                key={group.id}
+                group={group}
+                openMatch={openMatchByGroup.get(group.id) ?? null}
+              />
             ))}
           </div>
 
@@ -156,27 +189,25 @@ export default async function GruposPage() {
   );
 }
 
-async function GroupCard({ group }: { group: Awaited<ReturnType<typeof getPlayerGroups>>[0] }) {
-  // Buscar partido actual del grupo
-  const openMatch = await db
-    .select({
-      id: matches.id,
-      matchDate: matches.matchDate,
-      status: matches.status,
-      capacity: matches.capacity,
-      format: matches.format,
-    })
-    .from(matches)
-    .where(and(eq(matches.groupId, group.id), sql`${matches.status} <> 'finished'`))
-    .orderBy(matches.matchDate)
-    .limit(1)
-    .then((r) => r[0] ?? null);
-
+function GroupCard({
+  group,
+  openMatch,
+}: {
+  group: Awaited<ReturnType<typeof getPlayerGroups>>[0];
+  openMatch: {
+    id: number;
+    matchDate: Date;
+    status: "open" | "closed" | "finished";
+    capacity: number;
+    format: string;
+  } | null;
+}) {
   const proActive = isGroupPro(group);
 
   return (
     <Link
       href={`/grupos/${group.slug}`}
+      prefetch={false}
       className="card block space-y-3 hover:-translate-y-0.5 transition-all duration-200 animate-slide-up"
     >
       <div className="flex items-start justify-between">
