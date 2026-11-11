@@ -110,14 +110,22 @@ export async function createGroup(opts: {
 
 /** Busca un grupo por slug. */
 export const getGroupBySlug = cache(async (slug: string): Promise<Group | null> => {
-  const rows = await db.select().from(groups).where(eq(groups.slug, slug)).limit(1);
-  return rows[0] ?? null;
+  try {
+    const rows = await db.select().from(groups).where(eq(groups.slug, slug)).limit(1);
+    return rows[0] ?? null;
+  } catch (err: any) {
+    console.warn("[getGroupBySlug] Query failed, ensuring schema and retrying:", err?.message || err);
+    const { ensureAdminNotifyPreferenceColumn } = await import("./db-migrations");
+    await ensureAdminNotifyPreferenceColumn();
+    const rows = await db.select().from(groups).where(eq(groups.slug, slug)).limit(1);
+    return rows[0] ?? null;
+  }
 });
 
 /** Busca un grupo por código de invitación. */
 export async function getGroupByInviteCode(code: string): Promise<Group | null> {
-  const { ensureDbUpgrades } = await import("./db-migrations");
-  await ensureDbUpgrades();
+  const { ensureAdminNotifyPreferenceColumn } = await import("./db-migrations");
+  await ensureAdminNotifyPreferenceColumn();
   const cleanCode = (code || "").trim().toUpperCase();
   if (!cleanCode) return null;
   const rows = await db

@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { db, players, groupMembers, groups, type Player, type Group } from "@/db";
 import { eq, or, and, sql } from "drizzle-orm";
-import { ensureDbUpgrades } from "@/lib/db-migrations";
+import { ensureDbUpgrades, ensureAdminNotifyPreferenceColumn } from "@/lib/db-migrations";
 
 export type SessionUser = {
   name?: string | null;
@@ -43,6 +43,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
 export const getCurrentPlayer = cache(async (): Promise<Player | null> => {
   try {
     await ensureDbUpgrades();
+    await ensureAdminNotifyPreferenceColumn();
     const user = await getSessionUser();
     if (!user) return null;
 
@@ -215,6 +216,44 @@ export async function isGroupMember(groupId: number): Promise<boolean> {
   return role !== null;
 }
 
+async function queryPlayerGroups(playerId: number) {
+  return await db
+    .select({
+      id: groups.id,
+      name: groups.name,
+      slug: groups.slug,
+      description: groups.description,
+      format: groups.format,
+      defaultCapacity: groups.defaultCapacity,
+      defaultDayOfWeek: groups.defaultDayOfWeek,
+      defaultTime: groups.defaultTime,
+      inviteCode: groups.inviteCode,
+      ptsWin: groups.ptsWin,
+      ptsDraw: groups.ptsDraw,
+      ptsLoss: groups.ptsLoss,
+      teamAName: groups.teamAName,
+      teamBName: groups.teamBName,
+      adminNotifyPreference: groups.adminNotifyPreference,
+      isPro: groups.isPro,
+      proPlan: groups.proPlan,
+      proExpiresAt: groups.proExpiresAt,
+      stripeCustomerId: groups.stripeCustomerId,
+      stripeSubscriptionId: groups.stripeSubscriptionId,
+      mpPreapprovalId: groups.mpPreapprovalId,
+      createdBy: groups.createdBy,
+      createdAt: groups.createdAt,
+      role: groupMembers.role,
+    })
+    .from(groupMembers)
+    .innerJoin(groups, eq(groups.id, groupMembers.groupId))
+    .where(
+      and(
+        eq(groupMembers.playerId, playerId),
+        eq(groupMembers.status, "active")
+      )
+    );
+}
+
 /**
  * Devuelve todos los grupos activos del jugador actual.
  */
@@ -224,43 +263,13 @@ export const getPlayerGroups = cache(
       const player = await getCurrentPlayer();
       if (!player) return [];
 
-      const rows = await db
-        .select({
-          id: groups.id,
-          name: groups.name,
-          slug: groups.slug,
-          description: groups.description,
-          format: groups.format,
-          defaultCapacity: groups.defaultCapacity,
-          defaultDayOfWeek: groups.defaultDayOfWeek,
-          defaultTime: groups.defaultTime,
-          inviteCode: groups.inviteCode,
-          ptsWin: groups.ptsWin,
-          ptsDraw: groups.ptsDraw,
-          ptsLoss: groups.ptsLoss,
-          teamAName: groups.teamAName,
-          teamBName: groups.teamBName,
-          adminNotifyPreference: groups.adminNotifyPreference,
-          isPro: groups.isPro,
-          proPlan: groups.proPlan,
-          proExpiresAt: groups.proExpiresAt,
-          stripeCustomerId: groups.stripeCustomerId,
-          stripeSubscriptionId: groups.stripeSubscriptionId,
-          mpPreapprovalId: groups.mpPreapprovalId,
-          createdBy: groups.createdBy,
-          createdAt: groups.createdAt,
-          role: groupMembers.role,
-        })
-        .from(groupMembers)
-        .innerJoin(groups, eq(groups.id, groupMembers.groupId))
-        .where(
-          and(
-            eq(groupMembers.playerId, player.id),
-            eq(groupMembers.status, "active")
-          )
-        );
-
-      return rows;
+      try {
+        return await queryPlayerGroups(player.id);
+      } catch (err: any) {
+        console.warn("[getPlayerGroups] Error querying groups, ensuring schema and retrying:", err?.message || err);
+        await ensureAdminNotifyPreferenceColumn();
+        return await queryPlayerGroups(player.id);
+      }
     } catch (err) {
       console.error("[getPlayerGroups] Error:", err);
       return [];

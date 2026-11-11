@@ -8,7 +8,7 @@ import Link from "next/link";
 import { PlusCircle, LogIn, ChevronRight, Calendar, Users, Shield, User, Crown } from "lucide-react";
 import { db, matches, results, groups } from "@/db";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { ensureDbUpgrades } from "@/lib/db-migrations";
+import { ensureDbUpgrades, ensureAdminNotifyPreferenceColumn } from "@/lib/db-migrations";
 import { isSuperAdmin } from "@/lib/superadmin";
 import { isGroupPro } from "@/lib/billing";
 
@@ -16,6 +16,7 @@ export const dynamic = "force-dynamic";
 
 export default async function GruposPage() {
   await ensureDbUpgrades();
+  await ensureAdminNotifyPreferenceColumn();
   const user = await getSessionUser();
 
   if (!user) {
