@@ -7,7 +7,8 @@ import { getMatchDetails, getMatchVotes, getMatchNotes } from "@/lib/queries";
 import { getMatchGoals } from "@/lib/goals";
 import { getCurrentPlayer } from "@/lib/session";
 import { formatArt } from "@/lib/time";
-import { MatchSharePoster, computeVoteLeaders } from "@/components/match-share-poster";
+import { MatchSharePoster } from "@/components/match-share-poster";
+import { computeVoteLeaders } from "@/lib/vote-leaders";
 import { MatchDetailClient } from "@/app/grupos/[groupSlug]/historial/[id]/client-page";
 import {
   PlusCircle,

@@ -505,32 +505,42 @@ export async function getMatchDetails(matchId: number) {
 }
 
 export async function getMatchNotes(matchId: number) {
-  const { matchNotes } = await import("@/db/schema");
-  return db
-    .select({
-      id: matchNotes.id,
-      note: matchNotes.note,
-      createdAt: matchNotes.createdAt,
-      authorName: players.name,
-      authorId: players.id,
-    })
-    .from(matchNotes)
-    .innerJoin(players, eq(players.id, matchNotes.playerId))
-    .where(eq(matchNotes.matchId, matchId))
-    .orderBy(desc(matchNotes.createdAt));
+  try {
+    const { matchNotes } = await import("@/db/schema");
+    return await db
+      .select({
+        id: matchNotes.id,
+        note: matchNotes.note,
+        createdAt: matchNotes.createdAt,
+        authorName: players.name,
+        authorId: players.id,
+      })
+      .from(matchNotes)
+      .innerJoin(players, eq(players.id, matchNotes.playerId))
+      .where(eq(matchNotes.matchId, matchId))
+      .orderBy(desc(matchNotes.createdAt));
+  } catch (err) {
+    console.warn("[getMatchNotes] Error:", err);
+    return [];
+  }
 }
 
 export async function getMatchVotes(matchId: number) {
-  const { matchVotes } = await import("@/db/schema");
-  return db
-    .select({
-      id: matchVotes.id,
-      categoryId: matchVotes.categoryId,
-      voterId: matchVotes.voterId,
-      candidateId: matchVotes.candidateId,
-    })
-    .from(matchVotes)
-    .where(eq(matchVotes.matchId, matchId));
+  try {
+    const { matchVotes } = await import("@/db/schema");
+    return await db
+      .select({
+        id: matchVotes.id,
+        categoryId: matchVotes.categoryId,
+        voterId: matchVotes.voterId,
+        candidateId: matchVotes.candidateId,
+      })
+      .from(matchVotes)
+      .where(eq(matchVotes.matchId, matchId));
+  } catch (err) {
+    console.warn("[getMatchVotes] Error:", err);
+    return [];
+  }
 }
 
 export async function getLastFinishedMatch(groupId?: number) {

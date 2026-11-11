@@ -38,7 +38,10 @@ export default function GlobalRouteError({
         <div className="flex flex-col sm:flex-row gap-2 pt-2">
           <button
             type="button"
-            onClick={() => reset()}
+            onClick={() => {
+              reset();
+              window.location.reload();
+            }}
             className="btn-primary flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5"
           >
             <RefreshCw size={14} /> Reintentar

@@ -6,7 +6,8 @@ import { formatArt } from "@/lib/time";
 import { notFound } from "next/navigation";
 import { MatchDetailClient } from "./client-page";
 import { AIChronicleCard } from "@/components/ai-chronicle-card";
-import { MatchSharePoster, computeVoteLeaders } from "@/components/match-share-poster";
+import { MatchSharePoster } from "@/components/match-share-poster";
+import { computeVoteLeaders } from "@/lib/vote-leaders";
 import Link from "next/link";
 import { ArrowLeft, Edit3 } from "lucide-react";
 
