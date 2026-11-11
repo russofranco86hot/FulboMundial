@@ -3,6 +3,7 @@ import { db, groups, groupMembers, players, matches } from "@/db";
 import { eq, desc, sql } from "drizzle-orm";
 import { getCurrentPlayer, getSessionUser } from "./session";
 import { isGroupPro } from "./billing";
+import { ensureAdminNotifyPreferenceColumn } from "./db-migrations";
 
 const DEFAULT_OWNER_EMAILS = [
   "russofranco86@gmail.com",
@@ -67,6 +68,7 @@ export interface SuperAdminGroupRow {
 
 export async function getSuperAdminDashboardData() {
   await requireSuperAdmin();
+  await ensureAdminNotifyPreferenceColumn();
 
   const allGroups = await db.select().from(groups).orderBy(desc(groups.createdAt));
 

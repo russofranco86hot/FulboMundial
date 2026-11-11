@@ -26,14 +26,26 @@ export async function ensureAdminNotifyPreferenceColumn(): Promise<void> {
         ADD COLUMN IF NOT EXISTS pro_expires_at TIMESTAMPTZ,
         ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT,
         ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT,
-        ADD COLUMN IF NOT EXISTS mp_preapproval_id TEXT;
-      ALTER TABLE players 
-        ADD COLUMN IF NOT EXISTS preferred_position TEXT DEFAULT 'MED',
-        ADD COLUMN IF NOT EXISTS preferred_foot TEXT DEFAULT 'R';
-      ALTER TABLE matches 
-        ADD COLUMN IF NOT EXISTS team_a_name TEXT,
-        ADD COLUMN IF NOT EXISTS team_b_name TEXT;
+        ADD COLUMN IF NOT EXISTS mp_preapproval_id TEXT
     `);
+    try {
+      await db.execute(sql`
+        ALTER TABLE players 
+          ADD COLUMN IF NOT EXISTS preferred_position TEXT DEFAULT 'MED',
+          ADD COLUMN IF NOT EXISTS preferred_foot TEXT DEFAULT 'R'
+      `);
+    } catch (e) {
+      console.warn("Could not ensure players columns:", e);
+    }
+    try {
+      await db.execute(sql`
+        ALTER TABLE matches 
+          ADD COLUMN IF NOT EXISTS team_a_name TEXT,
+          ADD COLUMN IF NOT EXISTS team_b_name TEXT
+      `);
+    } catch (e) {
+      console.warn("Could not ensure matches columns:", e);
+    }
     schemaUpgradesChecked = true;
   } catch (err) {
     console.warn("Could not ensure schema columns:", err);
