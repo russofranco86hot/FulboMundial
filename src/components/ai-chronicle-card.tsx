@@ -3,18 +3,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   Sparkles,
-  Volume2,
   VolumeX,
   Play,
   Pause,
-  RotateCcw,
-  Share2,
   Copy,
   Check,
-  Flame,
   Radio,
   FileText,
   MessageCircle,
+  Loader2,
 } from "lucide-react";
 import type { ChronicleInput, ChronicleResult, ChronicleStyle } from "@/lib/ai-chronicle";
 
@@ -25,6 +22,85 @@ interface AIChronicleCardProps {
   isAdminView?: boolean;
 }
 
+/**
+ * Sintetizador de Ambiente de Cancha (Hinchada de fondo + Silbato inicial) en Web Audio API.
+ */
+function startStadiumAmbience(ctx: AudioContext, style: ChronicleStyle): () => void {
+  let stopped = false;
+
+  // 1) Silbato de árbitro al arrancar el modo Relator Exaltado
+  if (style === "relator") {
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(2850, ctx.currentTime);
+      osc.frequency.setValueAtTime(2980, ctx.currentTime + 0.06);
+      osc.frequency.setValueAtTime(2850, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.26);
+    } catch {}
+  }
+
+  // 2) Murmullo / aliento de tribuna de estadio suave de fondo (ruido rosa filtrado)
+  let noiseSource: AudioBufferSourceNode | null = null;
+  try {
+    const bufferSize = ctx.sampleRate * 3;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = buffer.getChannelData(0);
+    let b0 = 0,
+      b1 = 0,
+      b2 = 0;
+    for (let i = 0; i < bufferSize; i++) {
+      const white = Math.random() * 2 - 1;
+      b0 = 0.997 * b0 + white * 0.029;
+      b1 = 0.985 * b1 + white * 0.032;
+      b2 = 0.95 * b2 + white * 0.048;
+      output[i] = (b0 + b1 + b2) * 0.18;
+    }
+
+    noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = buffer;
+    noiseSource.loop = true;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = style === "relator" ? 650 : 480;
+    filter.Q.value = 1.2;
+
+    const crowdGain = ctx.createGain();
+    crowdGain.gain.value = style === "relator" ? 0.055 : 0.025;
+
+    noiseSource.connect(filter);
+    filter.connect(crowdGain);
+    crowdGain.connect(ctx.destination);
+    noiseSource.start();
+  } catch {}
+
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    try {
+      noiseSource?.stop();
+      noiseSource?.disconnect();
+    } catch {}
+  };
+}
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
 export function AIChronicleCard({
   inputData,
   initialChronicle,
@@ -33,6 +109,7 @@ export function AIChronicleCard({
 }: AIChronicleCardProps) {
   const [style, setStyle] = useState<ChronicleStyle>("relator");
   const [loading, setLoading] = useState(false);
+  const [loadingAudio, setLoadingAudio] = useState(false);
   const [result, setResult] = useState<ChronicleResult | null>(() => {
     if (initialChronicle) {
       return {
@@ -48,25 +125,41 @@ export function AIChronicleCard({
 
   const [copied, setCopied] = useState(false);
   const [applied, setApplied] = useState(false);
-
-  // Audio state (Web Speech API)
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const stopAmbienceRef = useRef<(() => void) | null>(null);
+  const abortPlayRef = useRef(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      setSpeechSupported(true);
-    }
     return () => {
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
+      stopAudio();
     };
   }, []);
 
-  const handleGenerate = async (chosenStyle: ChronicleStyle = style) => {
+  const stopAudio = () => {
+    abortPlayRef.current = true;
+    setIsPlaying(false);
+    setLoadingAudio(false);
+
+    try {
+      currentSourceRef.current?.stop();
+      currentSourceRef.current?.disconnect();
+      currentSourceRef.current = null;
+    } catch {}
+
+    try {
+      stopAmbienceRef.current?.();
+      stopAmbienceRef.current = null;
+    } catch {}
+
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
+  const handleGenerate = async (chosenStyle: ChronicleStyle = style): Promise<ChronicleResult | null> => {
     try {
       setLoading(true);
       stopAudio();
@@ -83,77 +176,134 @@ export function AIChronicleCard({
       if (!res.ok) throw new Error("Error en la llamada");
       const data: ChronicleResult = await res.json();
       setResult(data);
+      return data;
     } catch (e) {
       console.error("Error generando crónica:", e);
+      return null;
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePlayAudio = () => {
-    if (!speechSupported || !result) return;
+  /**
+   * Reproduce el relato con Voz Masculina Neuronal de Relator + Ambiente de Estadio,
+   * ajustando cadencia y tono según el estilo ("relator", "picante", "periodista").
+   */
+  const handlePlayAudio = async () => {
+    stopAudio();
+    abortPlayRef.current = false;
 
-    if (isPaused) {
-      window.speechSynthesis.resume();
-      setIsPaused(false);
+    let activeResult = result;
+    // Si todavía no había guion generado para este estilo, lo generamos al vuelo
+    if (!activeResult || activeResult.title === "Crónica Oficial del Partido") {
+      const generated = await handleGenerate(style);
+      if (generated) activeResult = generated;
+    }
+    if (!activeResult) return;
+
+    const script = activeResult.audioScript || activeResult.chronicle;
+    setLoadingAudio(true);
+
+    try {
+      const res = await fetch("/api/chronicle/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: script, style }),
+      });
+
+      if (!res.ok) throw new Error("TTS API fallback");
+      const data = (await res.json()) as { ok?: boolean; chunks?: string[] };
+      if (!data.ok || !data.chunks || data.chunks.length === 0) {
+        throw new Error("Empty TTS chunks");
+      }
+
+      if (abortPlayRef.current) return;
+
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+
+      // Decodificar todos los fragmentos MP3 en paralelo
+      const decodedBuffers = await Promise.all(
+        data.chunks.map((b64) => ctx.decodeAudioData(base64ToArrayBuffer(b64)))
+      );
+
+      if (abortPlayRef.current) return;
+
+      setLoadingAudio(false);
       setIsPlaying(true);
-      return;
-    }
 
-    window.speechSynthesis.cancel();
+      // Iniciar sonido ambiente de estadio según el modo elegido
+      stopAmbienceRef.current = startStadiumAmbience(ctx, style);
 
-    const script = result.audioScript || result.chronicle;
-    const utterance = new SpeechSynthesisUtterance(script);
-    utteranceRef.current = utterance;
+      // Configurar velocidad según el estilo seleccionado
+      const playbackRate =
+        style === "relator" ? 1.13 : style === "picante" ? 1.07 : 0.99;
 
-    // Configurar tono y ritmo enérgico de relator de fútbol
-    utterance.rate = 1.05;
-    utterance.pitch = 1.05;
+      // Reproducir cada oración encadenada con fluidez
+      for (const buffer of decodedBuffers) {
+        if (abortPlayRef.current) break;
+        await new Promise<void>((resolve) => {
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.playbackRate.value = playbackRate;
 
-    // Buscar una voz en español (preferentemente Argentina o América Latina)
-    const voices = window.speechSynthesis.getVoices();
-    const argVoice = voices.find(
-      (v) =>
-        v.lang.toLowerCase().includes("es-ar") ||
-        v.lang.toLowerCase().includes("es-419") ||
-        v.lang.toLowerCase().includes("es-us")
-    ) || voices.find((v) => v.lang.toLowerCase().startsWith("es"));
+          // Filtro sutil de cabina de transmisión radial
+          const eq = ctx.createBiquadFilter();
+          eq.type = "peaking";
+          eq.frequency.value = 1800;
+          eq.gain.value = style === "relator" ? 3.5 : 1.5;
 
-    if (argVoice) {
-      utterance.voice = argVoice;
-    }
+          source.connect(eq);
+          eq.connect(ctx.destination);
+          currentSourceRef.current = source;
 
-    utterance.onstart = () => {
-      setIsPlaying(true);
-      setIsPaused(false);
-    };
+          source.onended = () => resolve();
+          source.start();
+        });
+      }
 
-    utterance.onend = () => {
-      setIsPlaying(false);
-      setIsPaused(false);
-    };
+      stopAudio();
+    } catch (err) {
+      // Fallback: Web Speech API buscando explícitamente una voz masculina y grave
+      console.warn("Usando voz masculina local de respaldo:", err);
+      setLoadingAudio(false);
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
-    utterance.onerror = () => {
-      setIsPlaying(false);
-      setIsPaused(false);
-    };
+      const utterance = new SpeechSynthesisUtterance(script);
+      const voices = window.speechSynthesis.getVoices();
+      const esVoices = voices.filter((v) => v.lang.toLowerCase().startsWith("es"));
 
-    window.speechSynthesis.speak(utterance);
-  };
+      // Priorizar voces masculinas por nombre conocido y descartar Sabina/Helena/Laura/Paulina
+      const maleKeywords = ["tomas", "jorge", "alvaro", "pablo", "raul", "diego", "carlos", "male", "hombre"];
+      const femaleKeywords = ["sabina", "helena", "laura", "paulina", "paloma", "elvira", "dalia", "elena", "female"];
 
-  const handlePauseAudio = () => {
-    if (speechSupported && isPlaying) {
-      window.speechSynthesis.pause();
-      setIsPaused(true);
-      setIsPlaying(false);
-    }
-  };
+      const maleVoice =
+        esVoices.find((v) =>
+          maleKeywords.some((k) => v.name.toLowerCase().includes(k))
+        ) ||
+        esVoices.find(
+          (v) => !femaleKeywords.some((k) => v.name.toLowerCase().includes(k))
+        ) ||
+        esVoices[0];
 
-  const stopAudio = () => {
-    if (speechSupported) {
-      window.speechSynthesis.cancel();
-      setIsPlaying(false);
-      setIsPaused(false);
+      if (maleVoice) utterance.voice = maleVoice;
+
+      utterance.rate = style === "relator" ? 1.18 : style === "picante" ? 1.1 : 1.0;
+      utterance.pitch = style === "relator" ? 0.85 : style === "picante" ? 0.8 : 0.72;
+
+      utterance.onstart = () => setIsPlaying(true);
+      utterance.onend = () => setIsPlaying(false);
+      utterance.onerror = () => setIsPlaying(false);
+
+      window.speechSynthesis.speak(utterance);
     }
   };
 
@@ -182,6 +332,13 @@ export function AIChronicleCard({
     }
   };
 
+  const styleSubtitle =
+    style === "relator"
+      ? "Voz de cabina radial eufórica con ambiente de cancha"
+      : style === "picante"
+      ? "Locutor de vestuario con chicana y gastada futbolera"
+      : "Narrador profundo estilo documental épico";
+
   return (
     <div className="rounded-3xl border-2 border-emerald-500/40 bg-gradient-to-br from-zinc-950 via-pitch-950 to-zinc-900 text-white p-4 sm:p-5 shadow-2xl relative overflow-hidden space-y-4">
       {/* Luz ambiental de fondo */}
@@ -195,16 +352,16 @@ export function AIChronicleCard({
             <Radio size={18} className={isPlaying ? "animate-pulse" : ""} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-black text-base text-zinc-100 uppercase tracking-wide">
-                Crónica & Bot de Audio IA 🎙️
+                Crónica & Relator de Fútbol IA 🎙️
               </h3>
               <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full">
-                Relato Picante
+                Voz Relator Masculino
               </span>
             </div>
             <p className="text-xs text-zinc-400 font-medium">
-              Relato radial apasionado con datos duros y un toque de gastada sana.
+              Elegí el estilo abajo: cambia tanto el guion como la forma de relatar.
             </p>
           </div>
         </div>
@@ -217,19 +374,19 @@ export function AIChronicleCard({
           className="btn-primary text-xs py-2 px-3.5 font-bold shadow-glow-green flex items-center gap-1.5 shrink-0"
         >
           <Sparkles size={14} className={loading ? "animate-spin" : ""} />
-          <span>{loading ? "Relatando..." : result ? "Regenerar Crónica" : "Generar con IA"}</span>
+          <span>{loading ? "Armando relato..." : result ? "Regenerar Relato" : "Generar Relato IA"}</span>
         </button>
       </div>
 
-      {/* Selector de estilo */}
+      {/* Selector de estilo (cambia guion y cadencia del relator) */}
       <div className="flex items-center gap-1.5 p-1 bg-white/5 rounded-2xl border border-white/10 text-xs relative z-10 overflow-x-auto scrollbar-hide">
         <button
           type="button"
           onClick={() => {
             setStyle("relator");
-            if (result) handleGenerate("relator");
+            handleGenerate("relator");
           }}
-          className={`flex-1 min-w-[110px] py-1.5 px-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[110px] py-2 px-2.5 rounded-xl font-black transition-all flex items-center justify-center gap-1.5 ${
             style === "relator"
               ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/20"
               : "text-zinc-400 hover:text-zinc-200"
@@ -242,9 +399,9 @@ export function AIChronicleCard({
           type="button"
           onClick={() => {
             setStyle("picante");
-            if (result) handleGenerate("picante");
+            handleGenerate("picante");
           }}
-          className={`flex-1 min-w-[110px] py-1.5 px-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[110px] py-2 px-2.5 rounded-xl font-black transition-all flex items-center justify-center gap-1.5 ${
             style === "picante"
               ? "bg-rose-500 text-white shadow-md shadow-rose-500/20"
               : "text-zinc-400 hover:text-zinc-200"
@@ -257,9 +414,9 @@ export function AIChronicleCard({
           type="button"
           onClick={() => {
             setStyle("periodista");
-            if (result) handleGenerate("periodista");
+            handleGenerate("periodista");
           }}
-          className={`flex-1 min-w-[110px] py-1.5 px-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[110px] py-2 px-2.5 rounded-xl font-black transition-all flex items-center justify-center gap-1.5 ${
             style === "periodista"
               ? "bg-cyan-500 text-black shadow-md shadow-cyan-500/20"
               : "text-zinc-400 hover:text-zinc-200"
@@ -275,7 +432,7 @@ export function AIChronicleCard({
         <div className="space-y-3 relative z-10 animate-fade-in">
           {/* Título y texto */}
           <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-2">
-            <h4 className="font-black text-sm text-amber-300 tracking-wide uppercase flex items-center gap-2">
+            <h4 className="font-black text-sm text-amber-300 tracking-wide uppercase flex items-center gap-2 leading-snug">
               <span>⚡</span> {result.title}
             </h4>
             <div className="text-xs sm:text-sm text-zinc-200 leading-relaxed whitespace-pre-line font-medium">
@@ -290,25 +447,29 @@ export function AIChronicleCard({
           </div>
 
           {/* Reproductor de Audio del Relator */}
-          <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-950/70 via-zinc-900 to-teal-950/70 border border-emerald-500/30 flex items-center justify-between gap-3 flex-wrap">
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/80 via-zinc-900 to-teal-950/80 border border-emerald-500/40 flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3">
-              {isPlaying ? (
+              {loadingAudio ? (
+                <div className="w-11 h-11 rounded-full bg-amber-400 text-black flex items-center justify-center shadow-md shrink-0">
+                  <Loader2 size={20} className="animate-spin" />
+                </div>
+              ) : isPlaying ? (
                 <button
                   type="button"
-                  onClick={handlePauseAudio}
-                  className="w-10 h-10 rounded-full bg-amber-400 text-black flex items-center justify-center hover:scale-105 transition-all shadow-md shrink-0"
-                  title="Pausar audio"
+                  onClick={stopAudio}
+                  className="w-11 h-11 rounded-full bg-amber-400 text-black flex items-center justify-center hover:scale-105 transition-all shadow-md shrink-0"
+                  title="Detener transmisión"
                 >
-                  <Pause size={18} />
+                  <Pause size={19} />
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={handlePlayAudio}
-                  className="w-10 h-10 rounded-full bg-emerald-400 text-black flex items-center justify-center hover:scale-105 transition-all shadow-lg shadow-emerald-400/30 shrink-0"
-                  title="Escuchar audio del relato"
+                  className="w-11 h-11 rounded-full bg-emerald-400 text-black flex items-center justify-center hover:scale-105 transition-all shadow-lg shadow-emerald-400/30 shrink-0"
+                  title="Escuchar al Relator"
                 >
-                  <Play size={18} className="ml-0.5" />
+                  <Play size={19} className="ml-0.5" />
                 </button>
               )}
 
@@ -317,18 +478,34 @@ export function AIChronicleCard({
                   type="button"
                   onClick={stopAudio}
                   className="p-2 text-zinc-400 hover:text-red-400 transition-colors"
-                  title="Detener"
+                  title="Cortar audio"
                 >
                   <VolumeX size={16} />
                 </button>
               )}
 
               <div>
-                <span className="text-xs font-bold text-zinc-100 block">
-                  {isPlaying ? "Transmitiendo relato en vivo..." : isPaused ? "Relato en pausa" : "Audio del Relator"}
+                <span className="text-xs font-black text-zinc-100 block">
+                  {loadingAudio
+                    ? "Conectando con la cabina de transmisión..."
+                    : isPlaying
+                    ? `En vivo: ${
+                        style === "relator"
+                          ? "Relator Exaltado 🎙️"
+                          : style === "picante"
+                          ? "Modo Gastada 🔥"
+                          : "Periodista Épico 📰"
+                      }`
+                    : `Escuchar Relato (${
+                        style === "relator"
+                          ? "Relator Exaltado"
+                          : style === "picante"
+                          ? "Modo Gastada"
+                          : "Periodista Épico"
+                      })`}
                 </span>
-                <span className="text-[10px] text-zinc-400 font-medium">
-                  {isPlaying ? "Voz radial apasionada de fútbol" : "Tocá Play para escuchar la narración"}
+                <span className="text-[11px] text-zinc-400 font-medium block">
+                  {styleSubtitle}
                 </span>
               </div>
             </div>
