@@ -1,7 +1,9 @@
 import { getGroupBySlug } from "@/lib/groups";
 import { getAdvancedStats } from "@/lib/stats";
+import { getStandings } from "@/lib/queries";
 import { isGroupPro, getGroupProStatus } from "@/lib/billing";
 import { ProBadge, ProBanner, ProLockOverlay, TrialExpiringBanner } from "@/components/pro-gate";
+import { StatsShareCard } from "@/components/stats-share-card";
 import {
   Handshake,
   Swords,
@@ -28,7 +30,16 @@ export default async function GroupEstadisticasPage({
 
   const proStatus = getGroupProStatus(group);
   const proActive = proStatus.isPro;
-  const stats = await getAdvancedStats(group.id);
+  const [stats, standings] = await Promise.all([
+    getAdvancedStats(group.id),
+    getStandings(group.id),
+  ]);
+  const topStandings = standings.slice(0, 3).map((s) => ({
+    name: s.name,
+    pts: s.pts,
+    won: s.won,
+    played: s.played,
+  }));
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -64,6 +75,21 @@ export default async function GroupEstadisticasPage({
           ctaLabel="Desbloquear PRO"
         />
       )}
+
+      {/* ─── Exportar y Compartir Estadísticas en WhatsApp (Marketing Viral) ─── */}
+      <StatsShareCard
+        groupName={group.name}
+        groupSlug={group.slug}
+        inviteCode={group.inviteCode}
+        isPro={proActive}
+        topStandings={topStandings}
+        talismans={stats.talismans}
+        mufas={stats.mufas}
+        topChemistry={stats.topChemistry}
+        toxicDuos={stats.toxicDuos}
+        topPaternity={stats.topPaternity}
+        streaks={stats.streaks}
+      />
 
       {/* ─── El Amuleto y La Mufa (Grid de 2 columnas) ─── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
