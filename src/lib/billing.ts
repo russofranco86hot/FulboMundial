@@ -200,10 +200,9 @@ export async function createMercadoPagoPreference(opts: {
         category_id: "services",
         quantity: 1,
         currency_id: "ARS",
-        unit_price: plan.priceArs,
+        unit_price: Number(plan.priceArs),
       },
     ],
-    payer: opts.playerEmail ? { email: opts.playerEmail } : undefined,
     external_reference: externalReference,
     metadata: {
       group_id: String(opts.groupId),
@@ -219,6 +218,7 @@ export async function createMercadoPagoPreference(opts: {
     auto_return: "approved",
     notification_url: `${appUrl}/api/webhooks/mercadopago`,
     statement_descriptor: "FULBOMUNDIAL",
+    binary_mode: false,
   };
 
   const res = await fetch("https://api.mercadopago.com/checkout/preferences", {
