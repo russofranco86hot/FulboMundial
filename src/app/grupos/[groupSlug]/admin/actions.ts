@@ -8,11 +8,11 @@ import { requireGroupAdmin } from "@/lib/session";
 import { getCurrentMatch, getStandings } from "@/lib/queries";
 import { openNextMatch, closeSignups, recomputeFinalStatuses } from "@/lib/match-actions";
 import { buildBalancedTeams, type TeamPlayer } from "@/lib/teams";
-import { pushToAll } from "@/lib/push";
+import { pushToAll, pushToGroupMembers } from "@/lib/push";
 import { computeSelection } from "@/lib/selection";
 import { getAdvancedStats } from "@/lib/stats";
 import { notifyMatchCompletionAndAchievements } from "@/lib/achievements";
-import { artWallTimeToUtc } from "@/lib/time";
+import { artWallTimeToUtc, formatArt } from "@/lib/time";
 
 import { savePlayerComment, regenerateAllGroupComments } from "@/lib/player-comments";
 import { saveMatchPaymentConfig, adminTogglePlayerPaid } from "@/lib/payments";
@@ -472,6 +472,8 @@ export async function adminGroupSaveResult(formData: FormData) {
 
     await notifyMatchCompletionAndAchievements({
       matchId: match.id,
+      groupId,
+      groupSlug,
       scoreA,
       scoreB,
       notes,
@@ -554,7 +556,7 @@ export async function adminGroupSaveSettings(formData: FormData) {
   redirect(`/grupos/${groupSlug}/admin/configuracion?saved=1`);
 }
 
-// ─── Push manual ──────────────────────────────────────────────────────────
+// ─── Push manual y Alertas Pre/Post Partido ───────────────────────────────
 export async function adminGroupManualPush(formData: FormData) {
   const groupId = Number(formData.get("groupId"));
   const groupSlug = String(formData.get("groupSlug"));
@@ -562,13 +564,69 @@ export async function adminGroupManualPush(formData: FormData) {
 
   const message = String(formData.get("message") || "").trim();
   if (!message) return;
-  await pushToAll({
+  await pushToGroupMembers(groupId, {
     title: "Aviso de administración ⚽",
     body: message,
     url: `/grupos/${groupSlug}`,
     tag: `manual-${groupSlug}`,
   });
   refreshGroup(groupSlug);
+}
+
+export async function adminSendPreMatch24hReminder(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  const matchId = Number(formData.get("matchId"));
+  await requireGroupAdmin(groupId);
+
+  const { groups } = await import("@/db/schema");
+  const grp = (await db.select().from(groups).where(eq(groups.id, groupId)).limit(1))[0];
+  const match = matchId
+    ? (await db.select().from(matches).where(eq(matches.id, matchId)).limit(1))[0]
+    : await getCurrentMatch(groupId);
+
+  if (!match) return;
+
+  const activeSignups = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(signups)
+    .where(and(eq(signups.matchId, match.id), eq(signups.withdrawn, false)));
+  const signedCount = Number(activeSignups[0]?.count ?? 0);
+
+  await pushToGroupMembers(groupId, {
+    title: `⏰ ¡Confirmá tu asistencia en ${grp?.name || "el partido"}!`,
+    body: `Falta poco para el partido (${formatArt(match.matchDate, "EEEE HH:mm")}). Hay ${signedCount}/${match.capacity} anotados. ¡Confirmá o avisá con tiempo para que no falte uno a último momento!`,
+    url: `/grupos/${groupSlug}`,
+    tag: `pre-24h-${match.id}`,
+  });
+
+  refreshGroup(groupSlug);
+  redirect(`/grupos/${groupSlug}/admin/partido?matchId=${match.id}&reminded24h=1`);
+}
+
+export async function adminSendPostMatchVoteReminder(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  const matchId = Number(formData.get("matchId"));
+  await requireGroupAdmin(groupId);
+
+  const { groups } = await import("@/db/schema");
+  const grp = (await db.select().from(groups).where(eq(groups.id, groupId)).limit(1))[0];
+  const match = matchId
+    ? (await db.select().from(matches).where(eq(matches.id, matchId)).limit(1))[0]
+    : await getCurrentMatch(groupId);
+
+  if (!match) return;
+
+  await pushToGroupMembers(groupId, {
+    title: `🗳️ ¡Calificá a tus compañeros en ${grp?.name || "el partido"}!`,
+    body: `Ya terminó la fecha. Entrá a votar al MVP de la fecha ⭐ y al Burro de la fecha 🫏.`,
+    url: `/partido/${match.id}`,
+    tag: `post-vote-${match.id}`,
+  });
+
+  refreshGroup(groupSlug);
+  redirect(`/grupos/${groupSlug}/admin/resultado?matchId=${match.id}&remindedVote=1`);
 }
 
 // ─── Jugadores del grupo ──────────────────────────────────────────────────

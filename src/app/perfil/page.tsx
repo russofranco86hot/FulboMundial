@@ -20,7 +20,9 @@ import {
   LogOut,
   Sparkles,
   Layers,
+  Crown,
 } from "lucide-react";
+import { isSuperAdmin } from "@/lib/superadmin";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +41,11 @@ export default async function PerfilPage({
     redirect(`/login?callbackUrl=${encodeURIComponent("/perfil")}`);
   }
 
-  const [pendingNameRequest, playerGroups, params] = await Promise.all([
+  const [pendingNameRequest, playerGroups, params, superAdmin] = await Promise.all([
     getPendingNameRequestForPlayer(player.id),
     getPlayerGroups(),
     searchParams ? await searchParams : {},
+    isSuperAdmin(),
   ]);
 
   const initialChar = player.name ? player.name.trim().charAt(0).toUpperCase() : "•";
@@ -77,6 +80,31 @@ export default async function PerfilPage({
         <div className="rounded-2xl bg-red-500/15 p-4 text-sm font-semibold text-red-800 dark:text-red-300 border border-red-500/30 flex items-center gap-3">
           <AlertCircle className="text-red-600 dark:text-red-400 shrink-0" size={22} />
           <span>{params.error}</span>
+        </div>
+      )}
+
+      {/* Acceso directo al Panel de Dueño (SuperAdmin) */}
+      {superAdmin && (
+        <div className="rounded-2xl border-2 border-amber-400/70 bg-gradient-to-r from-zinc-950 via-emerald-950 to-zinc-900 text-white p-4 flex items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-400 to-yellow-300 text-zinc-950 flex items-center justify-center shrink-0">
+              <Crown size={20} />
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-wider text-amber-300">
+                Modo Dueño de FulboMundial
+              </p>
+              <p className="text-xs text-zinc-300">
+                Ver todos los grupos, sus administradores y habilitar PRO manualmente.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/superadmin"
+            className="py-2 px-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-zinc-950 font-black text-xs shrink-0 shadow-sm transition-colors"
+          >
+            Abrir Panel →
+          </Link>
         </div>
       )}
 

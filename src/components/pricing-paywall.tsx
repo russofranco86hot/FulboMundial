@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Crown,
   Check,
@@ -9,6 +10,7 @@ import {
   CreditCard,
   Loader2,
   Zap,
+  MessageCircle,
 } from "lucide-react";
 import {
   PRO_PLANS,
@@ -23,6 +25,7 @@ interface PricingPaywallProps {
   isPro: boolean;
   proPlan?: string | null;
   proExpiresAt?: string | null;
+  isSuperAdmin?: boolean;
 }
 
 export function PricingPaywall({
@@ -31,6 +34,7 @@ export function PricingPaywall({
   isPro,
   proPlan,
   proExpiresAt,
+  isSuperAdmin,
 }: PricingPaywallProps) {
   const [selectedPlan, setSelectedPlan] = useState<ProPlanId>("pro_annual");
   const [loadingProvider, setLoadingProvider] = useState<PaymentProvider | null>(null);
@@ -204,8 +208,42 @@ export function PricingPaywall({
         </div>
 
         {errorMsg && (
-          <div className="rounded-2xl bg-red-500/20 border border-red-400/40 p-3.5 text-xs font-semibold text-red-200">
-            ⚠️ {errorMsg}
+          <div className="rounded-2xl bg-amber-500/20 border border-amber-400/50 p-4 text-xs space-y-2.5 text-amber-100">
+            <p className="font-bold">⚠️ {errorMsg}</p>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(
+                  `¡Hola! Quiero activar el plan ${activePlan.name} (${activePlan.priceArsFormatted}) para nuestro grupo "${groupName}" (${groupSlug}) en FulboMundial.com.ar`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-[#25D366] hover:bg-[#1ebe5a] text-white font-black text-xs shadow-sm"
+              >
+                <MessageCircle size={14} /> Solicitar activación por Transferencia / WhatsApp
+              </a>
+              {isSuperAdmin && (
+                <Link
+                  href="/superadmin"
+                  className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-zinc-950 font-black text-xs shadow-sm"
+                >
+                  <Crown size={14} /> Activar PRO gratis desde Panel Dueño →
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isSuperAdmin && !errorMsg && (
+          <div className="rounded-2xl bg-amber-400/15 border border-amber-400/40 p-3.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="text-amber-200 font-bold">
+              👑 Sos el dueño de la aplicación: podés habilitar o quitar PRO en cualquier grupo sin pasar por la pasarela.
+            </span>
+            <Link
+              href="/superadmin"
+              className="py-1.5 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-zinc-950 font-black text-xs shrink-0"
+            >
+              Ir al Panel Dueño →
+            </Link>
           </div>
         )}
 

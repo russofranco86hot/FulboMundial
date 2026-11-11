@@ -6,6 +6,7 @@ const CRON_ROUTES: Record<string, string> = {
   "0 2 * * 4": "/api/cron/open-signups",
   "0 15 * * 3": "/api/cron/close-signups",
   "0 21 * * 3": "/api/cron/match-reminder",
+  "0 21 * * *": "/api/cron/match-reminder",
 };
 
 function syncEnvToProcess(env: Record<string, unknown>) {

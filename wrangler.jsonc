@@ -11,7 +11,7 @@
   "observability": { "enabled": true },
   // Reemplazan a vercel.json "crons" (horarios en UTC, igual que en Vercel)
   "triggers": {
-    "crons": ["0 2 * * 4", "0 15 * * 3", "0 21 * * 3"]
+    "crons": ["0 2 * * 4", "0 15 * * 3", "0 21 * * *"]
   },
   "workers_dev": true,
   "vars": {

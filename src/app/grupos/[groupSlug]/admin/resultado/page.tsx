@@ -1,13 +1,15 @@
 import { getGroupBySlug } from "@/lib/groups";
-import { getCurrentMatch, getMatchTeams } from "@/lib/queries";
+import { getCurrentMatch, getMatchTeams, getMatchVotes } from "@/lib/queries";
 import { getMatchGoals } from "@/lib/goals";
 import { db, matches, results } from "@/db";
 import { desc, eq } from "drizzle-orm";
 import { formatArt } from "@/lib/time";
-import { adminGroupSaveResult } from "../actions";
+import { adminGroupSaveResult, adminSendPostMatchVoteReminder } from "../actions";
 import { TeamEditor, type TeamRow } from "@/components/team-editor";
 import { NotesWithAI } from "./notes-with-ai";
-import { CheckCircle, Info, Calendar, ArrowRightLeft, ExternalLink } from "lucide-react";
+import { MatchSharePoster, computeVoteLeaders } from "@/components/match-share-poster";
+import { WhatsAppShare } from "@/components/whatsapp-share";
+import { CheckCircle, Info, Calendar, ArrowRightLeft, ExternalLink, Bell } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -18,13 +20,13 @@ export default async function GroupAdminResultado({
   searchParams,
 }: {
   params: Promise<{ groupSlug: string }>;
-  searchParams: Promise<{ saved?: string; matchId?: string }>;
+  searchParams: Promise<{ saved?: string; matchId?: string; remindedVote?: string }>;
 }) {
   const { groupSlug } = await params;
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();
 
-  const { saved, matchId: matchIdParam } = await searchParams;
+  const { saved, matchId: matchIdParam, remindedVote } = await searchParams;
 
   // Obtener partidos recientes del grupo para permitir seleccionar cuál editar
   const allGroupMatches = await db
@@ -68,8 +70,12 @@ export default async function GroupAdminResultado({
   const existing = (
     await db.select().from(results).where(eq(results.matchId, match.id)).limit(1)
   )[0];
-  const matchGoalsList = await getMatchGoals(match.id);
+  const [matchGoalsList, votes] = await Promise.all([
+    getMatchGoals(match.id),
+    getMatchVotes(match.id),
+  ]);
   const goalsMap = new Map(matchGoalsList.map((g) => [g.playerId, g]));
+  const { mvpLeader, burroLeader, golLeader } = computeVoteLeaders(votes, teamRows);
 
   const editorRows: TeamRow[] = teamRows.map((r) => ({
     id: r.id,
@@ -91,7 +97,13 @@ export default async function GroupAdminResultado({
       {saved === "1" && (
         <div className="rounded-2xl bg-green-500/15 p-4 text-sm font-semibold text-green-800 dark:text-green-300 border border-green-500/30 flex items-center gap-3 shadow-glow-green animate-scale-in">
           <CheckCircle className="text-green-600 dark:text-green-400 shrink-0" size={24} />
-          <span>¡Resultado y equipos guardados con éxito! La tabla histórica y las estadísticas han sido actualizadas.</span>
+          <span>¡Resultado y equipos guardados con éxito! Ya podés compartir la Placa Oficial en WhatsApp abajo.</span>
+        </div>
+      )}
+      {remindedVote === "1" && (
+        <div className="rounded-2xl bg-emerald-500/15 p-4 text-sm font-semibold text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-3 shadow-glow-green animate-scale-in">
+          <Bell className="text-emerald-600 dark:text-emerald-400 shrink-0" size={24} />
+          <span>¡Alerta Post-Partido enviada por Push a todos los miembros para que voten al MVP y al Burro de la fecha!</span>
         </div>
       )}
 
@@ -372,6 +384,61 @@ export default async function GroupAdminResultado({
           {isFinished ? "Guardar cambios de resultado y actualizar histórico" : "Guardar resultado y cerrar partido"}
         </button>
       </form>
+
+      {/* ─── Gancho Visual (Placa Oficial) + Alerta Post-Partido (Votar MVP y Burro) ─── */}
+      {existing && (
+        <div className="card space-y-5 border-2 border-emerald-500/40">
+          <MatchSharePoster
+            matchId={match.id}
+            groupName={group.name}
+            groupSlug={group.slug}
+            matchDateFormatted={formatArt(match.matchDate, "EEEE dd/MM/yyyy HH:mm")}
+            format={match.format}
+            teamAName={teamAName}
+            teamBName={teamBName}
+            scoreA={existing.scoreA}
+            scoreB={existing.scoreB}
+            playersA={teamA.map((t) => t.name)}
+            playersB={teamB.map((t) => t.name)}
+            scorers={matchGoalsList.map((g) => ({
+              name: g.name,
+              goals: g.goals,
+              assists: g.assists,
+            }))}
+            mvpLeader={mvpLeader}
+            burroLeader={burroLeader}
+            golLeader={golLeader}
+          />
+
+          <div className="rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 p-4 space-y-3">
+            <div>
+              <p className="text-xs font-black text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                <Bell size={14} /> Alerta Post-Partido: Calificar a los compañeros
+              </p>
+              <p className="text-[11px] text-amber-800/80 dark:text-amber-300/70">
+                Avisale a todos los jugadores que entren a votar quién fue el MVP de la fecha ⭐ y el Burro de la fecha 🫏.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <form action={adminSendPostMatchVoteReminder}>
+                <input type="hidden" name="groupId" value={group.id} />
+                <input type="hidden" name="groupSlug" value={group.slug} />
+                <input type="hidden" name="matchId" value={match.id} />
+                <button
+                  type="submit"
+                  className="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-zinc-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Bell size={14} /> Enviar Alerta Push para Votar
+                </button>
+              </form>
+              <WhatsAppShare
+                text={`🗳️ *¡TERMINÓ EL PARTIDO EN ${group.name.toUpperCase()}!*\n🏆 Resultado: *${teamAName} ${existing.scoreA} - ${existing.scoreB} ${teamBName}*\n\n🔥 *Entren a calificar a sus compañeros y votar los premios de la fecha:*\n⭐ MVP de la Fecha (La Figura)\n🫏 El Burro de la Fecha (El Rústico)\n⚽ Mejor Gol\n\n👉 https://fulbomundial.com.ar/partido/${match.id}`}
+                label="Pedir Votos por WhatsApp"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="text-center pt-2">
         <Link

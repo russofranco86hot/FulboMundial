@@ -5,10 +5,12 @@ import { getCurrentMatch } from "@/lib/queries";
 import { getPlayerComment } from "@/lib/player-comments";
 import { formatArt } from "@/lib/time";
 import Link from "next/link";
-import { PlusCircle, LogIn, ChevronRight, Calendar, Users, Shield, User } from "lucide-react";
+import { PlusCircle, LogIn, ChevronRight, Calendar, Users, Shield, User, Crown } from "lucide-react";
 import { db, matches, results, groups } from "@/db";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { ensureDbUpgrades } from "@/lib/db-migrations";
+import { isSuperAdmin } from "@/lib/superadmin";
+import { isGroupPro } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -67,27 +69,42 @@ export default async function GruposPage() {
     );
   }
 
-  const playerGroups = await getPlayerGroups();
+  const [playerGroups, superAdmin] = await Promise.all([
+    getPlayerGroups(),
+    isSuperAdmin(),
+  ]);
   const primaryComment =
     playerGroups.length > 0 ? await getPlayerComment(playerGroups[0].id, player.id) : null;
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h1 className="text-2xl font-extrabold text-pitch-700 dark:text-zinc-100">
             Mis grupos <span className="inline-block animate-bounce">⚽</span>
           </h1>
           <p className="text-sm text-pitch-900/60 dark:text-zinc-400">Hola, {player.name}</p>
         </div>
-        <Link
-          href="/perfil"
-          className="btn-ghost text-xs py-1.5 px-3 rounded-xl font-bold flex items-center gap-1.5 border border-zinc-200 dark:border-zinc-700 shadow-2xs hover:border-pitch-400"
-          title="Ver mi perfil y cambiar nombre"
-        >
-          <User size={14} className="text-pitch-600 dark:text-pitch-400" />
-          <span>Mi Perfil</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          {superAdmin && (
+            <Link
+              href="/superadmin"
+              className="py-1.5 px-3 rounded-xl font-black text-xs flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-yellow-300 text-zinc-950 shadow-sm hover:opacity-95 transition-opacity"
+              title="Panel de Dueño: administrar todos los grupos y activar PRO manualmente"
+            >
+              <Crown size={14} />
+              <span>Panel Dueño</span>
+            </Link>
+          )}
+          <Link
+            href="/perfil"
+            className="btn-ghost text-xs py-1.5 px-3 rounded-xl font-bold flex items-center gap-1.5 border border-zinc-200 dark:border-zinc-700 shadow-2xs hover:border-pitch-400"
+            title="Ver mi perfil y cambiar nombre"
+          >
+            <User size={14} className="text-pitch-600 dark:text-pitch-400" />
+            <span>Mi Perfil</span>
+          </Link>
+        </div>
       </div>
 
       {primaryComment && playerGroups.length > 0 && (
@@ -155,6 +172,8 @@ async function GroupCard({ group }: { group: Awaited<ReturnType<typeof getPlayer
     .limit(1)
     .then((r) => r[0] ?? null);
 
+  const proActive = isGroupPro(group);
+
   return (
     <Link
       href={`/grupos/${group.slug}`}
@@ -162,8 +181,13 @@ async function GroupCard({ group }: { group: Awaited<ReturnType<typeof getPlayer
     >
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h2 className="font-bold text-pitch-700 dark:text-zinc-100 truncate">{group.name}</h2>
+            {proActive && (
+              <span className="chip bg-gradient-to-r from-amber-400 to-yellow-300 text-zinc-950 text-[10px] font-black px-2 py-0.5 shrink-0 flex items-center gap-1 shadow-2xs">
+                <Crown size={10} /> PRO
+              </span>
+            )}
             {group.role === "admin" && (
               <span className="chip bg-pitch-600 text-white text-[10px] px-1.5 py-0.5 shrink-0 flex items-center gap-1">
                 <Shield size={10} /> Admin

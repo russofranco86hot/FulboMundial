@@ -1,10 +1,12 @@
 import "server-only";
-import { pushToAll, pushToPlayer } from "./push";
+import { pushToGroupMembers, pushToAll, pushToPlayer } from "./push";
 import { getStandings, type StandingRow } from "./queries";
 import { getAdvancedStats } from "./stats";
 
 type FinishMatchParams = {
   matchId: number;
+  groupId?: number;
+  groupSlug?: string;
   scoreA: number;
   scoreB: number;
   notes?: string | null;
@@ -20,6 +22,8 @@ type FinishMatchParams = {
  */
 export async function notifyMatchCompletionAndAchievements({
   matchId,
+  groupId,
+  groupSlug,
   scoreA,
   scoreB,
   notes,
@@ -28,15 +32,26 @@ export async function notifyMatchCompletionAndAchievements({
   teamAName = "Claro",
   teamBName = "Oscuro",
 }: FinishMatchParams) {
+  const matchUrl = groupSlug
+    ? `/grupos/${groupSlug}/historial/${matchId}`
+    : `/partido/${matchId}`;
+
   try {
-    // 1. Notificación general a todos los usuarios: resultado, nota y recordatorio de votación
-    const notePreview = notes && notes.trim() ? " ya podés leer la crónica oficial" : " ya podés ver el resumen";
-    await pushToAll({
-      title: "¡Partido finalizado! ⚽",
-      body: `${teamAName} ${scoreA} - ${scoreB} ${teamBName}:${notePreview} y votar a la Figura (MVP), el Tronco y el Mejor Gol 🏆`,
-      url: `/historial/${matchId}`,
+    // 1. Notificación post-partido: resultado, crónica y alerta para calificar compañeros (MVP y Burro de la fecha)
+    const notePreview =
+      notes && notes.trim() ? "Ya está la crónica oficial." : "Mirá el resumen de la fecha.";
+    const payload = {
+      title: `¡Partido finalizado! ${teamAName} ${scoreA} - ${scoreB} ${teamBName} ⚽`,
+      body: `${notePreview} ¡Entrá a calificar a tus compañeros y votar al MVP ⭐ y al Burro de la fecha 🫏!`,
+      url: matchUrl,
       tag: `match-finished-${matchId}`,
-    });
+    };
+
+    if (groupId) {
+      await pushToGroupMembers(groupId, payload);
+    } else {
+      await pushToAll(payload);
+    }
   } catch (err) {
     console.error("[achievements] Error enviando push general de partido finalizado:", err);
   }

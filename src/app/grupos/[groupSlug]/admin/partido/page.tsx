@@ -15,11 +15,12 @@ import {
   adminGroupClearTeams,
   adminGroupDeleteMatch,
   adminGroupFinishMatchWithoutResult,
+  adminSendPreMatch24hReminder,
 } from "../actions";
 import { getMatchPaymentConfig, getMatchPlayerPayments } from "@/lib/payments";
 import { TeamEditor, type TeamRow } from "@/components/team-editor";
 import { WhatsAppShare } from "@/components/whatsapp-share";
-import { MessageCircle, Shuffle, Users, Wallet, CheckCircle2, Clock, DollarSign, Edit3, Trash2, Trophy, ArrowRight } from "lucide-react";
+import { MessageCircle, Shuffle, Users, Wallet, CheckCircle2, Clock, DollarSign, Edit3, Trash2, Trophy, ArrowRight, Bell } from "lucide-react";
 import { db, matches } from "@/db";
 import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
@@ -32,10 +33,10 @@ export default async function GroupAdminPartido({
   searchParams,
 }: {
   params: Promise<{ groupSlug: string }>;
-  searchParams: Promise<{ matchId?: string; saved?: string; opened?: string }>;
+  searchParams: Promise<{ matchId?: string; saved?: string; opened?: string; reminded24h?: string }>;
 }) {
   const { groupSlug } = await params;
-  const { matchId: matchIdParam, saved, opened } = await searchParams;
+  const { matchId: matchIdParam, saved, opened, reminded24h } = await searchParams;
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();
 
@@ -175,6 +176,12 @@ export default async function GroupAdminPartido({
         <div className="rounded-2xl bg-green-500/15 p-4 text-sm font-semibold text-green-800 dark:text-green-300 border border-green-500/30 flex items-center gap-3 shadow-glow-green">
           <CheckCircle2 className="text-green-600 dark:text-green-400 shrink-0" size={24} />
           <span>¡Nuevo partido abierto con éxito! La lista de inscripción ya está disponible.</span>
+        </div>
+      )}
+      {reminded24h === "1" && (
+        <div className="rounded-2xl bg-emerald-500/15 p-4 text-sm font-semibold text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-3 shadow-glow-green">
+          <Bell className="text-emerald-600 dark:text-emerald-400 shrink-0" size={24} />
+          <span>¡Recordatorio Pre-Partido (24hs) enviado por notificación Push a todos los miembros del grupo!</span>
         </div>
       )}
 
@@ -443,8 +450,46 @@ export default async function GroupAdminPartido({
           )}
         </ul>
         
-        <div className="mt-4 border-t border-pitch-100 dark:border-zinc-800 pt-4">
+        <div className="mt-4 border-t border-pitch-100 dark:border-zinc-800 pt-4 space-y-3">
           <WhatsAppShare text={listMsg} label="Enviar lista al grupo" />
+
+          {/* Recordatorio Pre-Partido 24hs antes para evitar bajas a último momento */}
+          {match.status !== "finished" && (
+            <div className="rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <p className="text-xs font-black text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                    <Bell size={14} /> Recordatorio Pre-Partido (24 horas antes)
+                  </p>
+                  <p className="text-[11px] text-amber-800/80 dark:text-amber-300/70">
+                    Pedí confirmación de asistencia para evitar que se baje uno a último momento.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <form action={adminSendPreMatch24hReminder}>
+                  <input type="hidden" name="groupId" value={group.id} />
+                  <input type="hidden" name="groupSlug" value={group.slug} />
+                  <input type="hidden" name="matchId" value={match.id} />
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-zinc-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+                  >
+                    <Bell size={14} /> Enviar Alerta Push 24hs
+                  </button>
+                </form>
+                <WhatsAppShare
+                  text={`⏰ *CONFIRMACIÓN DE ASISTENCIA (24HS ANTES) — ${group.name.toUpperCase()}*\n📅 Partido: ${formatArt(
+                    match.matchDate,
+                    "EEEE dd/MM 'a las' HH:mm"
+                  )}\n👥 Anotados: ${titularesCount}/${match.capacity} titulares${
+                    suplentesCount > 0 ? ` (+${suplentesCount} suplentes)` : ""
+                  }\n\n⚠️ *Por favor confirmen asistencia o avisen AHORA si alguno está en duda para que no falte uno a último momento:*\n👉 https://fulbomundial.com.ar/grupos/${group.slug}`}
+                  label="Alerta 24hs por WhatsApp"
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

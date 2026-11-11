@@ -1,7 +1,7 @@
 import "server-only";
 import webpush from "web-push";
-import { db, pushSubscriptions } from "@/db";
-import { eq, inArray } from "drizzle-orm";
+import { db, pushSubscriptions, groupMembers } from "@/db";
+import { and, eq, inArray } from "drizzle-orm";
 
 let configured = false;
 function ensureConfigured(): boolean {
@@ -68,4 +68,24 @@ export async function pushToPlayer(playerId: number, payload: PushPayload) {
     .from(pushSubscriptions)
     .where(eq(pushSubscriptions.playerId, playerId));
   return deliver(subs, payload);
+}
+
+/** Notifica a todos los miembros activos de un grupo (con fallback a pushToAll si no hay playerIds asociados). */
+export async function pushToGroupMembers(groupId: number, payload: PushPayload) {
+  const members = await db
+    .select({ playerId: groupMembers.playerId })
+    .from(groupMembers)
+    .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.status, "active")));
+
+  const playerIds = members.map((m) => m.playerId).filter(Boolean);
+  if (playerIds.length > 0) {
+    const subs = await db
+      .select()
+      .from(pushSubscriptions)
+      .where(inArray(pushSubscriptions.playerId, playerIds));
+    if (subs.length > 0) {
+      return deliver(subs, payload);
+    }
+  }
+  return pushToAll(payload);
 }

@@ -6,6 +6,7 @@ import { formatArt } from "@/lib/time";
 import { notFound } from "next/navigation";
 import { MatchDetailClient } from "./client-page";
 import { AIChronicleCard } from "@/components/ai-chronicle-card";
+import { MatchSharePoster, computeVoteLeaders } from "@/components/match-share-poster";
 import Link from "next/link";
 import { ArrowLeft, Edit3 } from "lucide-react";
 
@@ -43,6 +44,7 @@ export default async function GroupMatchDetailPage({
 
   const teamAName = match.teamAName || group.teamAName || "Claro";
   const teamBName = match.teamBName || group.teamBName || "Oscuro";
+  const { mvpLeader, burroLeader, golLeader } = computeVoteLeaders(votes, match.teams);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -135,6 +137,31 @@ export default async function GroupMatchDetailPage({
             }}
           />
         </div>
+      </div>
+
+      {/* Placa Viral del Partido (Feature Loop con MVP, Burro y Watermark fulbomundial.com.ar/partido/[id]) */}
+      <div className="card">
+        <MatchSharePoster
+          matchId={matchId}
+          groupName={group.name}
+          groupSlug={group.slug}
+          matchDateFormatted={formatArt(match.matchDate, "EEEE dd/MM/yyyy HH:mm")}
+          format={match.format}
+          teamAName={teamAName}
+          teamBName={teamBName}
+          scoreA={scoreA}
+          scoreB={scoreB}
+          playersA={teamA.map((t) => t.name)}
+          playersB={teamB.map((t) => t.name)}
+          scorers={matchGoals.map((g) => ({
+            name: g.name,
+            goals: g.goals,
+            assists: g.assists,
+          }))}
+          mvpLeader={mvpLeader}
+          burroLeader={burroLeader}
+          golLeader={golLeader}
+        />
       </div>
 
       {/* Goles y asistencias del partido */}

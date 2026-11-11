@@ -1,5 +1,6 @@
 import { getGroupBySlug } from "@/lib/groups";
 import { isGroupPro } from "@/lib/billing";
+import { isSuperAdmin } from "@/lib/superadmin";
 import { PricingPaywall } from "@/components/pricing-paywall";
 import { ProBadge } from "@/components/pro-gate";
 import { Crown, CheckCircle2, Clock, AlertCircle, ArrowLeft } from "lucide-react";
@@ -17,7 +18,10 @@ export default async function GroupProPage({
 }) {
   const { groupSlug } = await params;
   const { status, provider } = await searchParams;
-  const group = await getGroupBySlug(groupSlug);
+  const [group, superAdmin] = await Promise.all([
+    getGroupBySlug(groupSlug),
+    isSuperAdmin(),
+  ]);
   if (!group) return notFound();
 
   const proActive = isGroupPro(group);
@@ -87,6 +91,7 @@ export default async function GroupProPage({
         isPro={proActive}
         proPlan={group.proPlan}
         proExpiresAt={group.proExpiresAt ? group.proExpiresAt.toISOString() : null}
+        isSuperAdmin={superAdmin}
       />
     </div>
   );

@@ -483,6 +483,9 @@ export async function getMatchDetails(matchId: number) {
   const m = await db
     .select({
       id: matches.id,
+      groupId: matches.groupId,
+      format: matches.format,
+      status: matches.status,
       matchDate: matches.matchDate,
       scoreA: results.scoreA,
       scoreB: results.scoreB,
