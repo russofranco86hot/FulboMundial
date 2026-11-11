@@ -5,10 +5,10 @@ import { verifyCredentials } from "@/lib/auth-credentials";
 
 /**
  * Auth.js (NextAuth v5) con Google y Email/Contraseña.
- * Estrategia JWT: el vínculo jugador se resuelve por google_id o por email
- * contra la tabla `players`.
+ * Usamos inicialización perezosa `NextAuth(() => ({ ... }))` para que en Cloudflare Workers
+ * las variables `process.env.*` (Secrets) se lean dentro del contexto de cada request.
  */
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
   trustHost: true,
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   providers: [
@@ -62,4 +62,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
   },
-});
+}));

@@ -1,20 +1,104 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { actionLoginCredentials, actionRegisterCredentials } from "./actions";
+import { useState, type FormEvent } from "react";
+import { actionRegisterCredentials } from "./actions";
 import { signIn } from "next-auth/react";
 import { LogIn, UserPlus, Mail, Lock, User, AlertCircle } from "lucide-react";
 
 export function LoginForm() {
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [loginState, loginAction, loginPending] = useActionState(actionLoginCredentials, null);
-  const [regState, regAction, regPending] = useActionState(actionRegisterCredentials, null);
+  const [loginPending, setLoginPending] = useState(false);
+  const [regPending, setRegPending] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [regError, setRegError] = useState<string | null>(null);
+
+  async function handleLoginSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoginError(null);
+    setLoginPending(true);
+
+    const formData = new FormData(e.currentTarget);
+    const email = String(formData.get("email") || "").trim().toLowerCase();
+    const password = String(formData.get("password") || "");
+
+    if (!email || !password) {
+      setLoginError("Por favor ingresá tu correo y contraseña.");
+      setLoginPending(false);
+      return;
+    }
+
+    try {
+      const res = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (!res || res.error) {
+        setLoginError("Correo o contraseña incorrectos.");
+        setLoginPending(false);
+        return;
+      }
+
+      window.location.href = "/grupos";
+    } catch {
+      setLoginError("Error al iniciar sesión. Verificá tus credenciales.");
+      setLoginPending(false);
+    }
+  }
+
+  async function handleRegisterSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setRegError(null);
+    setRegPending(true);
+
+    const formData = new FormData(e.currentTarget);
+    const name = String(formData.get("name") || "").trim();
+    const email = String(formData.get("email") || "").trim().toLowerCase();
+    const password = String(formData.get("password") || "");
+    const confirmPassword = String(formData.get("confirmPassword") || "");
+
+    try {
+      const regRes = await actionRegisterCredentials({
+        name,
+        email,
+        password,
+        confirmPassword,
+      });
+
+      if (regRes.error) {
+        setRegError(regRes.error);
+        setRegPending(false);
+        return;
+      }
+
+      const loginRes = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (!loginRes || loginRes.error) {
+        setRegError(
+          "Cuenta creada correctamente. Ahora podés iniciar sesión con tu correo y clave."
+        );
+        setMode("login");
+        setRegPending(false);
+        return;
+      }
+
+      window.location.href = "/grupos";
+    } catch {
+      setRegError("Ocurrió un problema al registrar la cuenta. Intentá nuevamente.");
+      setRegPending(false);
+    }
+  }
 
   return (
     <div className="w-full max-w-sm space-y-5 animate-fade-in">
       {/* Botón de Google */}
       <button
-        onClick={() => signIn("google", { callbackUrl: "/" })}
+        onClick={() => signIn("google", { callbackUrl: "/grupos" })}
         type="button"
         className="btn-ghost w-full py-2.5 px-4 flex items-center justify-center gap-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-750 shadow-sm text-sm font-semibold text-zinc-700 dark:text-zinc-200"
       >
@@ -52,7 +136,10 @@ export function LoginForm() {
       <div className="flex bg-zinc-100 dark:bg-zinc-800/60 p-1 rounded-xl">
         <button
           type="button"
-          onClick={() => setMode("login")}
+          onClick={() => {
+            setMode("login");
+            setLoginError(null);
+          }}
           className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
             mode === "login"
               ? "bg-white dark:bg-zinc-700 text-pitch-800 dark:text-zinc-100 shadow-sm"
@@ -63,7 +150,10 @@ export function LoginForm() {
         </button>
         <button
           type="button"
-          onClick={() => setMode("register")}
+          onClick={() => {
+            setMode("register");
+            setRegError(null);
+          }}
           className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
             mode === "register"
               ? "bg-white dark:bg-zinc-700 text-pitch-800 dark:text-zinc-100 shadow-sm"
@@ -75,23 +165,23 @@ export function LoginForm() {
       </div>
 
       {/* Mensajes de error */}
-      {mode === "login" && loginState?.error && (
+      {mode === "login" && loginError && (
         <div className="card p-3 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
           <AlertCircle size={16} className="shrink-0" />
-          <span>{loginState.error}</span>
+          <span>{loginError}</span>
         </div>
       )}
 
-      {mode === "register" && regState?.error && (
+      {mode === "register" && regError && (
         <div className="card p-3 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
           <AlertCircle size={16} className="shrink-0" />
-          <span>{regState.error}</span>
+          <span>{regError}</span>
         </div>
       )}
 
       {/* Formulario de Login */}
       {mode === "login" && (
-        <form action={loginAction} className="card space-y-3.5 p-5">
+        <form onSubmit={handleLoginSubmit} className="card space-y-3.5 p-5">
           <div className="space-y-1">
             <label className="block text-xs font-bold text-pitch-800 dark:text-zinc-300">
               Correo electrónico
@@ -137,7 +227,7 @@ export function LoginForm() {
 
       {/* Formulario de Registro */}
       {mode === "register" && (
-        <form action={regAction} className="card space-y-3.5 p-5">
+        <form onSubmit={handleRegisterSubmit} className="card space-y-3.5 p-5">
           <div className="space-y-1">
             <label className="block text-xs font-bold text-pitch-800 dark:text-zinc-300">
               Nombre o apodo <span className="text-red-500">*</span>

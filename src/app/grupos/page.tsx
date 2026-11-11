@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser, getCurrentPlayer, getPlayerGroups } from "@/lib/session";
-import { signIn } from "@/auth";
+import { GoogleSignInButton } from "@/components/auth-buttons";
 import { getCurrentMatch } from "@/lib/queries";
 import { getPlayerComment } from "@/lib/player-comments";
 import { formatArt } from "@/lib/time";
@@ -24,16 +24,10 @@ export default async function GruposPage() {
           <p className="text-pitch-900/70 dark:text-zinc-400">
             Iniciá sesión para ver tus grupos.
           </p>
-          <form
-            action={async () => {
-              "use server";
-              await signIn("google", { redirectTo: "/grupos" });
-            }}
-          >
-            <button className="btn-primary w-full flex items-center justify-center gap-2">
-              <LogIn size={18} /> Entrar con Google
-            </button>
-          </form>
+          <GoogleSignInButton
+            callbackUrl="/grupos"
+            className="btn-primary w-full flex items-center justify-center gap-2"
+          />
           <div>
             <Link
               href="/login"

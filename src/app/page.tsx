@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
-import { getSessionUser, getPlayerGroups } from "@/lib/session";
-import { signIn } from "@/auth";
+import { getSessionUser } from "@/lib/session";
+import { GoogleSignInButton } from "@/components/auth-buttons";
 import Link from "next/link";
-import { PlusCircle, Users, Calendar } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -27,14 +26,7 @@ export default async function HomePage() {
           <p className="text-sm text-pitch-900/70 dark:text-zinc-400">
             Iniciá sesión para ver tus grupos y partidos.
           </p>
-          <form
-            action={async () => {
-              "use server";
-              await signIn("google", { redirectTo: "/" });
-            }}
-          >
-            <button className="btn-primary w-full text-lg">Entrar con Google</button>
-          </form>
+          <GoogleSignInButton callbackUrl="/grupos" />
           <div className="pt-1">
             <Link href="/login" className="text-xs font-semibold text-pitch-600 hover:text-pitch-700 dark:text-pitch-400 hover:underline">
               O ingresar con correo y contraseña →

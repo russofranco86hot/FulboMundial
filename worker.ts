@@ -8,14 +8,31 @@ const CRON_ROUTES: Record<string, string> = {
   "0 21 * * 3": "/api/cron/match-reminder",
 };
 
+function syncEnvToProcess(env: Record<string, unknown>) {
+  if (!env || typeof process === "undefined" || !process.env) return;
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === "string") {
+      process.env[key] = value;
+    }
+  }
+}
+
 export default {
-  fetch: handler.fetch,
+  async fetch(
+    request: Request,
+    env: Record<string, unknown>,
+    ctx: { waitUntil(p: Promise<unknown>): void }
+  ) {
+    syncEnvToProcess(env);
+    return handler.fetch(request, env, ctx);
+  },
 
   async scheduled(
     event: { cron: string },
-    env: { APP_URL?: string; CRON_SECRET?: string },
+    env: { APP_URL?: string; CRON_SECRET?: string } & Record<string, unknown>,
     ctx: { waitUntil(p: Promise<unknown>): void }
   ) {
+    syncEnvToProcess(env);
     const path = CRON_ROUTES[event.cron];
     if (!path) return;
     const req = new Request(`${env.APP_URL || "https://fulbomundial.com.ar"}${path}`, {

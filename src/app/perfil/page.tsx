@@ -6,8 +6,8 @@ import {
   actionRequestNameChange,
   actionCancelNameRequest,
   actionUpdatePreferences,
-  actionSignOut,
 } from "./actions";
+import { SignOutButton } from "@/components/auth-buttons";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -62,16 +62,7 @@ export default async function PerfilPage({
         </div>
 
         {/* Botón rápido de cerrar sesión en la cabecera */}
-        <form action={actionSignOut}>
-          <button
-            type="submit"
-            className="btn-ghost text-xs py-1.5 px-3 flex items-center gap-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-900/40 rounded-xl font-bold"
-            title="Cerrar sesión"
-          >
-            <LogOut size={14} />
-            <span>Salir</span>
-          </button>
-        </form>
+        <SignOutButton compact />
       </div>
 
       {/* Alertas de Éxito / Error */}
@@ -257,15 +248,9 @@ export default async function PerfilPage({
           </div>
         </div>
 
-        <form action={actionSignOut} className="pt-2">
-          <button
-            type="submit"
-            className="w-full py-3 px-4 rounded-2xl bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300 font-black text-sm flex items-center justify-center gap-2 transition-all shadow-sm"
-          >
-            <LogOut size={16} />
-            <span>Cerrar sesión (Desloguearse)</span>
-          </button>
-        </form>
+        <div className="pt-2">
+          <SignOutButton />
+        </div>
       </div>
     </div>
   );
