@@ -38,7 +38,7 @@ export default async function GroupEstadisticasPage({
     name: s.name,
     pts: s.pts,
     won: s.won,
-    played: s.played,
+    played: s.gp,
   }));
 
   return (
