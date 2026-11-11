@@ -30,6 +30,39 @@ export async function GET(req: NextRequest) {
     let sentPre24h = 0;
     let sentMatchDay = 0;
     let sentPostMatch = 0;
+    let sentTrialWarnings = 0;
+
+    // 0) ALERTA DE VENCIMIENTO DE TEMPORADA DE PRUEBA (Faltando 3 días o 1 día)
+    const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const expiringGroups = await db
+      .select({
+        id: groups.id,
+        name: groups.name,
+        slug: groups.slug,
+        proExpiresAt: groups.proExpiresAt,
+        proPlan: groups.proPlan,
+      })
+      .from(groups)
+      .where(
+        and(
+          eq(groups.isPro, true),
+          eq(groups.proPlan, "pro_trial_30d"),
+          gte(groups.proExpiresAt, now),
+          lte(groups.proExpiresAt, in3Days)
+        )
+      );
+
+    for (const g of expiringGroups) {
+      if (!g.proExpiresAt) continue;
+      const diffDays = Math.max(1, Math.ceil((new Date(g.proExpiresAt).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+      await pushToGroupMembers(g.id, {
+        title: `⚠️ ¡Quedan ${diffDays} días de tu Pase Capitán PRO en ${g.name}!`,
+        body: `Tu temporada de prueba está por vencer. Cumplido el plazo pasarás al plan gratis. ¡Asegurá el pase para todo el equipo!`,
+        url: `/grupos/${g.slug}/pro`,
+        tag: `trial-expire-${g.id}`,
+      });
+      sentTrialWarnings++;
+    }
 
     // 1) PRE-PARTIDO (24hs antes): Partidos abiertos/cerrados entre +20h y +28h
     const upcoming24h = await db
@@ -138,6 +171,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
+      sentTrialWarnings,
       sentPre24h,
       sentMatchDay,
       sentPostMatch,

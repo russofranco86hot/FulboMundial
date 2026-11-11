@@ -74,6 +74,9 @@ export async function createGroup(opts: {
     else inviteCode = generateInviteCode();
   }
 
+  // Temporada de Prueba (Pase Capitán / Pro 30 días gratis)
+  const trialExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
   const [group] = await db
     .insert(groups)
     .values({
@@ -85,6 +88,9 @@ export async function createGroup(opts: {
       defaultDayOfWeek: opts.defaultDayOfWeek,
       defaultTime: opts.defaultTime,
       inviteCode,
+      isPro: true,
+      proPlan: "pro_trial_30d",
+      proExpiresAt: trialExpiresAt,
       ...(opts.teamAName ? { teamAName: opts.teamAName } : {}),
       ...(opts.teamBName ? { teamBName: opts.teamBName } : {}),
       createdBy: opts.creatorPlayerId,

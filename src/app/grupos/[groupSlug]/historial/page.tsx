@@ -3,9 +3,9 @@ import { getStandings, getRecentMatches } from "@/lib/queries";
 import { getGroupTopScorers } from "@/lib/goals";
 import { formatArt } from "@/lib/time";
 import { isGroupAdmin } from "@/lib/session";
-import { isGroupPro } from "@/lib/billing";
+import { isGroupPro, getGroupProStatus } from "@/lib/billing";
 import { FREE_LIMITS } from "@/lib/plans";
-import { ProBadge, ProBanner } from "@/components/pro-gate";
+import { ProBadge, ProBanner, TrialExpiringBanner } from "@/components/pro-gate";
 import { Trophy } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -21,7 +21,8 @@ export default async function GroupHistorialPage({
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();
 
-  const proActive = isGroupPro(group);
+  const proStatus = getGroupProStatus(group);
+  const proActive = proStatus.isPro;
   const [rows, recentMatches, topScorers, isAdmin] = await Promise.all([
     getStandings(group.id),
     getRecentMatches(group.id, proActive ? 30 : 10),
@@ -35,11 +36,19 @@ export default async function GroupHistorialPage({
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {proStatus.isExpiringSoon && proStatus.daysRemaining !== null && (
+        <TrialExpiringBanner groupSlug={group.slug} daysRemaining={proStatus.daysRemaining} />
+      )}
+
       <div>
         <h1 className="text-2xl font-extrabold text-pitch-700 dark:text-zinc-100 flex items-center gap-2 flex-wrap">
           <Trophy className="w-6 h-6 text-gold-500" />
           Historial — {group.name}
-          <ProBadge active={proActive} />
+          <ProBadge
+            active={proActive}
+            isTrial={proStatus.isTrial}
+            daysRemaining={proStatus.daysRemaining}
+          />
         </h1>
         <p className="text-sm text-pitch-900/60 dark:text-zinc-400 mt-1">
           Tabla histórica de los partidos jugados. Pts = (G×3 + E×2 + P×1).

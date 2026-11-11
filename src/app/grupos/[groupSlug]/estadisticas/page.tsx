@@ -1,7 +1,7 @@
 import { getGroupBySlug } from "@/lib/groups";
 import { getAdvancedStats } from "@/lib/stats";
-import { isGroupPro } from "@/lib/billing";
-import { ProBadge, ProBanner, ProLockOverlay } from "@/components/pro-gate";
+import { isGroupPro, getGroupProStatus } from "@/lib/billing";
+import { ProBadge, ProBanner, ProLockOverlay, TrialExpiringBanner } from "@/components/pro-gate";
 import {
   Handshake,
   Swords,
@@ -26,17 +26,26 @@ export default async function GroupEstadisticasPage({
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();
 
-  const proActive = isGroupPro(group);
+  const proStatus = getGroupProStatus(group);
+  const proActive = proStatus.isPro;
   const stats = await getAdvancedStats(group.id);
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {proStatus.isExpiringSoon && proStatus.daysRemaining !== null && (
+        <TrialExpiringBanner groupSlug={group.slug} daysRemaining={proStatus.daysRemaining} />
+      )}
+
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-black text-pitch-800 dark:text-zinc-100 flex items-center gap-2 flex-wrap">
             <BarChart3 className="text-pitch-600" />
             Métricas y Folclore — {group.name}
-            <ProBadge active={proActive} />
+            <ProBadge
+              active={proActive}
+              isTrial={proStatus.isTrial}
+              daysRemaining={proStatus.daysRemaining}
+            />
           </h1>
           <p className="text-sm text-pitch-900/60 dark:text-zinc-400 mt-1">
             Sociedades, rivalidades, amuletos y las gastadas históricas del grupo.

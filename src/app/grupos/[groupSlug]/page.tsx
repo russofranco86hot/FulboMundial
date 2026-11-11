@@ -15,6 +15,8 @@ import { eq } from "drizzle-orm";
 import { CheckCircle2, Clock, CircleDashed, ArrowRight, CloudSun } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ensureDbUpgrades } from "@/lib/db-migrations";
+import { getGroupProStatus } from "@/lib/billing";
+import { TrialExpiringBanner } from "@/components/pro-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -53,10 +55,14 @@ export default async function GroupHomePage({
 
   const lastFinishedTeamAName = lastFinished?.teamAName || group.teamAName || "Claro";
   const lastFinishedTeamBName = lastFinished?.teamBName || group.teamBName || "Oscuro";
+  const proStatus = getGroupProStatus(group);
 
   if (!match) {
     return (
       <div className="space-y-5 animate-fade-in">
+        {proStatus.isExpiringSoon && proStatus.daysRemaining !== null && (
+          <TrialExpiringBanner groupSlug={group.slug} daysRemaining={proStatus.daysRemaining} />
+        )}
         <PlayerCommentCard
           player={player}
           comment={playerComment}
@@ -134,6 +140,10 @@ export default async function GroupHomePage({
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {proStatus.isExpiringSoon && proStatus.daysRemaining !== null && (
+        <TrialExpiringBanner groupSlug={group.slug} daysRemaining={proStatus.daysRemaining} />
+      )}
+
       {/* Resumen personalizado del jugador */}
       <PlayerCommentCard
         player={player}

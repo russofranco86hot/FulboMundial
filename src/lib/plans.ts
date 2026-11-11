@@ -1,4 +1,4 @@
-export type ProPlanId = "pro_monthly" | "pro_annual" | "pro_lifetime";
+export type ProPlanId = "pro_monthly" | "pro_annual" | "pro_lifetime" | "pro_trial_30d";
 export type PaymentProvider = "mercadopago" | "stripe";
 
 export interface ProPlanConfig {
@@ -49,6 +49,18 @@ export const PRO_PLANS: Record<ProPlanId, ProPlanConfig> = {
     priceUsdCents: 7999,
     priceUsdFormatted: "$79.99 USD",
     periodLabel: "pago único",
+  },
+  pro_trial_30d: {
+    id: "pro_trial_30d",
+    name: "Temporada de Prueba (Pase Capitán)",
+    badge: "30 DÍAS GRATIS",
+    description: "Temporada de prueba con acceso completo a todas las funciones PRO para todo el grupo.",
+    durationDays: 30,
+    priceArs: 0,
+    priceArsFormatted: "GRATIS",
+    priceUsdCents: 0,
+    priceUsdFormatted: "FREE",
+    periodLabel: "30 días de prueba",
   },
 };
 

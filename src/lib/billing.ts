@@ -6,8 +6,54 @@ import { PRO_PLANS, type ProPlanId, type PaymentProvider } from "./plans";
 import { ensureDbUpgrades } from "./db-migrations";
 
 /**
+ * Información sobre el estado de la suscripción PRO de un grupo,
+ * incluyendo días restantes de prueba gratuita ("Pase Capitán").
+ */
+export function getGroupProStatus(
+  group: Pick<Group, "slug" | "isPro" | "proExpiresAt" | "proPlan"> | null | undefined
+): {
+  isPro: boolean;
+  isTrial: boolean;
+  daysRemaining: number | null;
+  expiresAt: Date | null;
+  isExpiringSoon: boolean;
+} {
+  if (!group) {
+    return { isPro: false, isTrial: false, daysRemaining: null, expiresAt: null, isExpiringSoon: false };
+  }
+
+  const whitelist = (process.env.PRO_WHITELIST_SLUGS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (whitelist.includes(group.slug.toLowerCase())) {
+    return { isPro: true, isTrial: false, daysRemaining: null, expiresAt: null, isExpiringSoon: false };
+  }
+
+  if (!group.isPro) {
+    return { isPro: false, isTrial: false, daysRemaining: null, expiresAt: null, isExpiringSoon: false };
+  }
+
+  const isTrial = group.proPlan === "pro_trial_30d";
+
+  if (group.proExpiresAt) {
+    const expires = new Date(group.proExpiresAt);
+    const diffMs = expires.getTime() - Date.now();
+    if (diffMs <= 0) {
+      return { isPro: false, isTrial, daysRemaining: 0, expiresAt: expires, isExpiringSoon: false };
+    }
+    const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const isExpiringSoon = daysRemaining <= 5; // faltan 5 días o menos para el vencimiento
+
+    return { isPro: true, isTrial, daysRemaining, expiresAt: expires, isExpiringSoon };
+  }
+
+  return { isPro: true, isTrial, daysRemaining: null, expiresAt: null, isExpiringSoon: false };
+}
+
+/**
  * Determina si un grupo tiene suscripción PRO activa.
- * Soporta fecha de expiración (`proExpiresAt`) y lista blanca por variable de entorno (`PRO_WHITELIST_SLUGS`).
  */
 export function isGroupPro(
   group: Pick<Group, "slug" | "isPro" | "proExpiresAt"> | null | undefined
