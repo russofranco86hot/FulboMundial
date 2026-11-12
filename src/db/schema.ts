@@ -163,6 +163,8 @@ export const signups = pgTable(
     withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
     // Cacheado al cierre: titular o suplente.
     finalStatus: finalStatusEnum("final_status"),
+    // Orden manual asignado por el admin para el partido (1, 2, ... N)
+    manualOrder: integer("manual_order"),
   },
   (t) => ({
     uniq: uniqueIndex("signups_match_player_uniq").on(t.matchId, t.playerId),

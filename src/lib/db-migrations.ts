@@ -46,6 +46,14 @@ export async function ensureAdminNotifyPreferenceColumn(): Promise<void> {
     } catch (e) {
       console.warn("Could not ensure matches columns:", e);
     }
+    try {
+      await db.execute(sql`
+        ALTER TABLE signups 
+          ADD COLUMN IF NOT EXISTS manual_order INTEGER
+      `);
+    } catch (e) {
+      console.warn("Could not ensure signups manual_order column:", e);
+    }
     schemaUpgradesChecked = true;
   } catch (err) {
     console.warn("Could not ensure schema columns:", err);

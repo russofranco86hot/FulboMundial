@@ -210,6 +210,11 @@ export default async function GroupAdminJugadores({
                     <span className="chip bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-[10px] px-1.5 py-0.5">
                       {m.preferredFoot === "L" ? "Zurdo" : m.preferredFoot === "BOTH" ? "Ambidiestro" : "Derecho"}
                     </span>
+                    {m.priorityOrder < 900 && (
+                      <span className="chip bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-[10px] px-1.5 py-0.5 font-bold" title="Prioridad especial de convocatoria">
+                        ⭐ Prioridad #{m.priorityOrder}
+                      </span>
+                    )}
                   </div>
                   {m.email && <p className="text-xs text-pitch-900/50 dark:text-zinc-400">{m.email}</p>}
                 </div>
@@ -292,7 +297,7 @@ export default async function GroupAdminJugadores({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
                   <div>
                     <label className="block text-[11px] font-semibold text-pitch-900/60 dark:text-zinc-400 mb-0.5">
                       Posición:
@@ -339,6 +344,21 @@ export default async function GroupAdminJugadores({
                     />
                   </div>
 
+                  <div>
+                    <label className="block text-[11px] font-semibold text-pitch-900/60 dark:text-zinc-400 mb-0.5" title="999 = automático por llegada. Menor número = mayor prioridad">
+                      Prioridad:
+                    </label>
+                    <input
+                      type="number"
+                      name="priorityOrder"
+                      defaultValue={m.priorityOrder ?? 999}
+                      min={1}
+                      max={999}
+                      className="input w-full py-1 px-1.5 text-center text-xs"
+                      title="Menor número = mayor prioridad de convocatoria. 999 = automático por llegada."
+                    />
+                  </div>
+
                   <div className="flex flex-col justify-end pb-1">
                     <label className="flex items-center gap-1 cursor-pointer">
                       <input
@@ -347,7 +367,7 @@ export default async function GroupAdminJugadores({
                         defaultChecked={m.isGoalkeeper}
                         className="rounded"
                       />
-                      <span className="text-pitch-900/70 dark:text-zinc-400 text-xs">🧤 Arquero fijo</span>
+                      <span className="text-pitch-900/70 dark:text-zinc-400 text-xs">🧤 Arquero</span>
                     </label>
                   </div>
                 </div>

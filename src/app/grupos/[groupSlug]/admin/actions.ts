@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db, players, matches, signups, teams, results, attendanceLog } from "@/db";
 import { requireGroupAdmin } from "@/lib/session";
-import { getCurrentMatch, getStandings } from "@/lib/queries";
+import { getCurrentMatch, getStandings, getSelection } from "@/lib/queries";
 import { openNextMatch, closeSignups, recomputeFinalStatuses } from "@/lib/match-actions";
 import { buildBalancedTeams, type TeamPlayer } from "@/lib/teams";
 import { pushToAll, pushToGroupMembers } from "@/lib/push";
@@ -223,6 +223,151 @@ export async function adminGroupToggleSignup(formData: FormData) {
         .where(eq(signups.id, existing.id));
     }
   }
+
+  if (match.status !== "open") {
+    await recomputeFinalStatuses(match);
+  }
+  refreshGroup(groupSlug);
+}
+
+/**
+ * Reordena subiendo (up) o bajando (down) de posición a un jugador anotado en el partido.
+ */
+export async function adminGroupReorderSignup(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  const matchId = Number(formData.get("matchId"));
+  const playerId = Number(formData.get("playerId"));
+  const direction = String(formData.get("direction")); // "up" | "down"
+  await requireGroupAdmin(groupId);
+
+  const match = matchId
+    ? (await db.select().from(matches).where(eq(matches.id, matchId)).limit(1))[0]
+    : await getCurrentMatch(groupId);
+  if (!match || !playerId) return;
+
+  const selection = await getSelection(match);
+  const currentIndex = selection.findIndex((s) => s.playerId === playerId);
+  if (currentIndex === -1) return;
+
+  const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+  if (targetIndex < 0 || targetIndex >= selection.length) return;
+
+  const reordered = [...selection];
+  const [moved] = reordered.splice(currentIndex, 1);
+  reordered.splice(targetIndex, 0, moved);
+
+  for (let i = 0; i < reordered.length; i++) {
+    await db
+      .update(signups)
+      .set({ manualOrder: i + 1 })
+      .where(and(eq(signups.matchId, match.id), eq(signups.playerId, reordered[i].playerId)));
+  }
+
+  if (match.status !== "open") {
+    await recomputeFinalStatuses(match);
+  }
+  refreshGroup(groupSlug);
+}
+
+/**
+ * Pasa a un jugador titular a los suplentes (se mueve a la posición de primer suplente).
+ */
+export async function adminGroupMoveToSubstitute(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  const matchId = Number(formData.get("matchId"));
+  const playerId = Number(formData.get("playerId"));
+  await requireGroupAdmin(groupId);
+
+  const match = matchId
+    ? (await db.select().from(matches).where(eq(matches.id, matchId)).limit(1))[0]
+    : await getCurrentMatch(groupId);
+  if (!match || !playerId) return;
+
+  const selection = await getSelection(match);
+  const currentIndex = selection.findIndex((s) => s.playerId === playerId);
+  if (currentIndex === -1) return;
+
+  // Destino: primer suplente (índice capacity) o el último disponible
+  const targetIndex = Math.min(match.capacity, selection.length - 1);
+  if (currentIndex === targetIndex) return;
+
+  const reordered = [...selection];
+  const [moved] = reordered.splice(currentIndex, 1);
+  reordered.splice(targetIndex, 0, moved);
+
+  for (let i = 0; i < reordered.length; i++) {
+    await db
+      .update(signups)
+      .set({ manualOrder: i + 1 })
+      .where(and(eq(signups.matchId, match.id), eq(signups.playerId, reordered[i].playerId)));
+  }
+
+  if (match.status !== "open") {
+    await recomputeFinalStatuses(match);
+  }
+  refreshGroup(groupSlug);
+}
+
+/**
+ * Pasa a un jugador suplente a los titulares (se mueve a la posición de último titular).
+ */
+export async function adminGroupMoveToPlaying(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  const matchId = Number(formData.get("matchId"));
+  const playerId = Number(formData.get("playerId"));
+  await requireGroupAdmin(groupId);
+
+  const match = matchId
+    ? (await db.select().from(matches).where(eq(matches.id, matchId)).limit(1))[0]
+    : await getCurrentMatch(groupId);
+  if (!match || !playerId) return;
+
+  const selection = await getSelection(match);
+  const currentIndex = selection.findIndex((s) => s.playerId === playerId);
+  if (currentIndex === -1) return;
+
+  // Destino: último titular (índice capacity - 1)
+  const targetIndex = Math.max(0, Math.min(match.capacity - 1, selection.length - 1));
+  if (currentIndex === targetIndex) return;
+
+  const reordered = [...selection];
+  const [moved] = reordered.splice(currentIndex, 1);
+  reordered.splice(targetIndex, 0, moved);
+
+  for (let i = 0; i < reordered.length; i++) {
+    await db
+      .update(signups)
+      .set({ manualOrder: i + 1 })
+      .where(and(eq(signups.matchId, match.id), eq(signups.playerId, reordered[i].playerId)));
+  }
+
+  if (match.status !== "open") {
+    await recomputeFinalStatuses(match);
+  }
+  refreshGroup(groupSlug);
+}
+
+/**
+ * Restablece el orden de los anotados al orden automático por llegada (hora de inscripción).
+ */
+export async function adminGroupResetSignupsOrder(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  const matchId = Number(formData.get("matchId"));
+  await requireGroupAdmin(groupId);
+
+  const match = matchId
+    ? (await db.select().from(matches).where(eq(matches.id, matchId)).limit(1))[0]
+    : await getCurrentMatch(groupId);
+  if (!match) return;
+
+  await db
+    .update(signups)
+    .set({ manualOrder: null })
+    .where(eq(signups.matchId, match.id));
 
   if (match.status !== "open") {
     await recomputeFinalStatuses(match);
@@ -645,6 +790,8 @@ export async function adminGroupUpdatePlayer(formData: FormData) {
   const stars = String(formData.get("stars") ?? "0");
   const preferredPosition = String(formData.get("preferredPosition") || "MED");
   const preferredFoot = String(formData.get("preferredFoot") || "R");
+  const rawPriority = formData.get("priorityOrder");
+  const priorityOrder = rawPriority !== null && rawPriority !== "" ? Number(rawPriority) : 999;
 
   await db
     .update(players)
@@ -655,6 +802,7 @@ export async function adminGroupUpdatePlayer(formData: FormData) {
       isGoalkeeper: formData.get("isGoalkeeper") === "on",
       preferredPosition,
       preferredFoot,
+      priorityOrder,
       email,
     })
     .where(eq(players.id, id));

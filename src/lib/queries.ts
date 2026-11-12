@@ -50,6 +50,7 @@ export type SignupWithPlayer = {
   playerId: number;
   priorityOrder: number;
   signupAt: Date;
+  manualOrder?: number | null;
   withdrawn: boolean;
   name: string;
   isGoalkeeper: boolean;
@@ -59,21 +60,44 @@ export type SignupWithPlayer = {
 
 /** Anotados vigentes (no dados de baja) de un partido, con datos del jugador. */
 export async function getActiveSignups(matchId: number): Promise<SignupWithPlayer[]> {
-  const rows = await db
-    .select({
-      playerId: signups.playerId,
-      priorityOrder: players.priorityOrder,
-      signupAt: signups.signupAt,
-      withdrawn: signups.withdrawn,
-      name: players.name,
-      isGoalkeeper: players.isGoalkeeper,
-      stars: players.stars,
-      phone: players.phone,
-    })
-    .from(signups)
-    .innerJoin(players, eq(players.id, signups.playerId))
-    .where(and(eq(signups.matchId, matchId), eq(signups.withdrawn, false)));
-  return rows as SignupWithPlayer[];
+  const { ensureAdminNotifyPreferenceColumn } = await import("./db-migrations");
+  await ensureAdminNotifyPreferenceColumn();
+
+  try {
+    const rows = await db
+      .select({
+        playerId: signups.playerId,
+        priorityOrder: players.priorityOrder,
+        signupAt: signups.signupAt,
+        manualOrder: signups.manualOrder,
+        withdrawn: signups.withdrawn,
+        name: players.name,
+        isGoalkeeper: players.isGoalkeeper,
+        stars: players.stars,
+        phone: players.phone,
+      })
+      .from(signups)
+      .innerJoin(players, eq(players.id, signups.playerId))
+      .where(and(eq(signups.matchId, matchId), eq(signups.withdrawn, false)));
+    return rows as SignupWithPlayer[];
+  } catch (err) {
+    console.warn("[getActiveSignups] Error querying with manualOrder, fallback without it:", err);
+    const rows = await db
+      .select({
+        playerId: signups.playerId,
+        priorityOrder: players.priorityOrder,
+        signupAt: signups.signupAt,
+        withdrawn: signups.withdrawn,
+        name: players.name,
+        isGoalkeeper: players.isGoalkeeper,
+        stars: players.stars,
+        phone: players.phone,
+      })
+      .from(signups)
+      .innerJoin(players, eq(players.id, signups.playerId))
+      .where(and(eq(signups.matchId, matchId), eq(signups.withdrawn, false)));
+    return rows as SignupWithPlayer[];
+  }
 }
 
 /** Lista provisional / final: titulares y suplentes por prioridad. */

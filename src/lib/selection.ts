@@ -3,22 +3,24 @@
  *  REGLA DE SELECCIÓN (núcleo del sistema) — MANTENER CENTRALIZADA Y COMENTADA
  * ──────────────────────────────────────────────────────────────────────────
  *
- *  Para jugar hay que ANOTARSE. Anotarse es el requisito; el orden o la
- *  velocidad con la que te anotás NO decide si jugás.
+ *  1. ORDEN MANUAL DEL PARTIDO (prioridad máxima):
+ *     Si el admin reordenó los anotados en el partido (o pasó un titular a suplente / viceversa),
+ *     se respeta estrictamente `manualOrder` (1, 2, 3... N).
  *
- *  Cuando se cierra la lista, juegan los `capacity` (10) anotados de mayor
- *  prioridad  (priority_order más BAJO = más prioridad). El resto quedan de
- *  suplentes, ordenados por la misma prioridad (suplente 1, 2, 3, …).
+ *  2. PRIORIDAD ESPECIAL DE JUGADOR (< 900):
+ *     Si el admin configuró a un jugador con prioridad VIP explícita en Miembros (menor número = más prioridad,
+ *     ej. 1, 2, 3), tiene prioridad para ser titular sobre los que tienen prioridad estándar (999).
  *
- *  Desempate: si dos jugadores comparten priority_order (p.ej. JuanCe y Lucho,
- *  orden 8), gana el que se anotó primero (signup_at más temprano). Es solo un
- *  criterio de desempate entre iguales; nunca cambia la prioridad general.
+ *  3. AUTOMÁTICO (POR ORDEN DE LLEGADA / INSCRIPCIÓN):
+ *     Los jugadores se ordenan automáticamente según la fecha y hora en que se anotaron (`signupAt` cronológico).
+ *     Los primeros `capacity` son Titulares; los siguientes son Suplente 1, Suplente 2, etc.
  */
 
 export type SelectionInput = {
   playerId: number;
-  priorityOrder: number;
+  priorityOrder?: number;
   signupAt: Date | string | number;
+  manualOrder?: number | null;
 };
 
 export type SelectionRow<T extends SelectionInput = SelectionInput> = T & {
@@ -30,10 +32,28 @@ export type SelectionRow<T extends SelectionInput = SelectionInput> = T & {
   rank: number;
 };
 
-/** Ordena los anotados por prioridad y desempata por hora de anotación. */
+/** Ordena los anotados según la regla unificada. */
 export function orderSignups<T extends SelectionInput>(signups: T[]): T[] {
   return [...signups].sort((a, b) => {
-    if (a.priorityOrder !== b.priorityOrder) return a.priorityOrder - b.priorityOrder;
+    // 1. Si tienen orden manual asignado por el admin para el partido:
+    const aManual = a.manualOrder ?? null;
+    const bManual = b.manualOrder ?? null;
+    if (aManual !== null && bManual !== null) {
+      if (aManual !== bManual) return aManual - bManual;
+    } else if (aManual !== null) {
+      return -1;
+    } else if (bManual !== null) {
+      return 1;
+    }
+
+    // 2. Si el admin asignó una prioridad especial (< 900) a algún jugador:
+    const aPrio = a.priorityOrder ?? 999;
+    const bPrio = b.priorityOrder ?? 999;
+    if (aPrio !== bPrio && (aPrio < 900 || bPrio < 900)) {
+      return aPrio - bPrio;
+    }
+
+    // 3. Automático: orden de llegada (hora en que se anotó)
     return new Date(a.signupAt).getTime() - new Date(b.signupAt).getTime();
   });
 }

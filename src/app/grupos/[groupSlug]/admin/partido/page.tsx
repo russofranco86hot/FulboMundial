@@ -16,11 +16,31 @@ import {
   adminGroupDeleteMatch,
   adminGroupFinishMatchWithoutResult,
   adminSendPreMatch24hReminder,
+  adminGroupReorderSignup,
+  adminGroupMoveToSubstitute,
+  adminGroupMoveToPlaying,
+  adminGroupResetSignupsOrder,
 } from "../actions";
 import { getMatchPaymentConfig, getMatchPlayerPayments } from "@/lib/payments";
 import { TeamEditor, type TeamRow } from "@/components/team-editor";
 import { WhatsAppShare } from "@/components/whatsapp-share";
-import { MessageCircle, Shuffle, Users, Wallet, CheckCircle2, Clock, DollarSign, Edit3, Trash2, Trophy, ArrowRight, Bell } from "lucide-react";
+import {
+  MessageCircle,
+  Shuffle,
+  Users,
+  Wallet,
+  CheckCircle2,
+  Clock,
+  DollarSign,
+  Edit3,
+  Trash2,
+  Trophy,
+  ArrowRight,
+  Bell,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
+} from "lucide-react";
 import { db, matches } from "@/db";
 import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
@@ -379,9 +399,32 @@ export default async function GroupAdminPartido({
 
       {/* Lista */}
       <div className="card">
-        <h3 className="mb-4 font-bold text-pitch-800 dark:text-pitch-100 flex items-center gap-2">
-          Lista ({selection.length} anotados)
-        </h3>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div>
+            <h3 className="font-bold text-pitch-800 dark:text-pitch-100 flex items-center gap-2">
+              Lista ({selection.length} anotados)
+            </h3>
+            <p className="text-[11px] text-pitch-900/60 dark:text-zinc-400">
+              {selection.some((s) => s.manualOrder !== null && s.manualOrder !== undefined)
+                ? "⚡ Orden manual activo asignado por el admin."
+                : "⏱️ Orden automático por llegada (hora de inscripción)."}
+            </p>
+          </div>
+          {selection.some((s) => s.manualOrder !== null && s.manualOrder !== undefined) && (
+            <form action={adminGroupResetSignupsOrder}>
+              <input type="hidden" name="groupId" value={group.id} />
+              <input type="hidden" name="groupSlug" value={group.slug} />
+              <input type="hidden" name="matchId" value={match.id} />
+              <button
+                type="submit"
+                className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-pitch-600 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
+                title="Restablece el orden al orden de llegada original de inscripción"
+              >
+                <RotateCcw size={12} /> Restablecer a orden de llegada
+              </button>
+            </form>
+          )}
+        </div>
         
         <ul className="space-y-1.5 text-sm">
           {selection.map((s, i) => {
@@ -399,11 +442,11 @@ export default async function GroupAdminPartido({
                   </div>
                 )}
                 
-                <div className={`flex items-center gap-3 p-2 rounded-xl transition-colors ${
+                <div className={`flex items-center gap-2.5 p-2 rounded-xl transition-colors ${
                   s.status === "playing" ? "bg-pitch-50/50 dark:bg-zinc-800/50" : "bg-amber-50/50 dark:bg-amber-900/10"
-                } hover:bg-pitch-100 dark:hover:bg-zinc-800`}>
+                } hover:bg-pitch-100/70 dark:hover:bg-zinc-800`}>
                   <span
-                    className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shadow-sm ${
+                    className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shadow-sm shrink-0 ${
                       s.status === "playing"
                         ? "bg-gradient-to-br from-pitch-500 to-pitch-700 text-white"
                         : "bg-gradient-to-br from-amber-400 to-amber-600 text-white"
@@ -412,33 +455,110 @@ export default async function GroupAdminPartido({
                     {s.status === "playing" ? i + 1 : `S${s.substituteIndex}`}
                   </span>
                   
-                  <span className="flex-1 font-medium text-zinc-800 dark:text-zinc-200">{s.name}</span>
+                  <span className="flex-1 font-medium text-zinc-800 dark:text-zinc-200 truncate">{s.name}</span>
+
+                  {/* Acciones de reordenamiento y titular / suplente */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* Flechas Subir / Bajar */}
+                    <div className="flex items-center bg-white dark:bg-zinc-700 rounded-lg border border-zinc-200 dark:border-zinc-600 overflow-hidden shadow-2xs">
+                      <form action={adminGroupReorderSignup}>
+                        <input type="hidden" name="groupId" value={group.id} />
+                        <input type="hidden" name="groupSlug" value={group.slug} />
+                        <input type="hidden" name="matchId" value={match.id} />
+                        <input type="hidden" name="playerId" value={s.playerId} />
+                        <input type="hidden" name="direction" value="up" />
+                        <button
+                          type="submit"
+                          disabled={i === 0}
+                          className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-600 disabled:opacity-25 disabled:hover:bg-transparent text-zinc-700 dark:text-zinc-300 transition-colors"
+                          title="Subir posición"
+                        >
+                          <ArrowUp size={13} />
+                        </button>
+                      </form>
+                      <div className="w-px h-3 bg-zinc-200 dark:bg-zinc-600" />
+                      <form action={adminGroupReorderSignup}>
+                        <input type="hidden" name="groupId" value={group.id} />
+                        <input type="hidden" name="groupSlug" value={group.slug} />
+                        <input type="hidden" name="matchId" value={match.id} />
+                        <input type="hidden" name="playerId" value={s.playerId} />
+                        <input type="hidden" name="direction" value="down" />
+                        <button
+                          type="submit"
+                          disabled={i === selection.length - 1}
+                          className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-600 disabled:opacity-25 disabled:hover:bg-transparent text-zinc-700 dark:text-zinc-300 transition-colors"
+                          title="Bajar posición"
+                        >
+                          <ArrowDown size={13} />
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* Pasar a Suplente (si es Titular) */}
+                    {s.status === "playing" && suplentesCount > 0 && (
+                      <form action={adminGroupMoveToSubstitute}>
+                        <input type="hidden" name="groupId" value={group.id} />
+                        <input type="hidden" name="groupSlug" value={group.slug} />
+                        <input type="hidden" name="matchId" value={match.id} />
+                        <input type="hidden" name="playerId" value={s.playerId} />
+                        <button
+                          type="submit"
+                          className="text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 px-2 py-1 rounded-lg border border-amber-300/70 dark:border-amber-800/70 transition-colors whitespace-nowrap"
+                          title="Pasa este titular a suplente (el primer suplente pasará a titular)"
+                        >
+                          A Suplente
+                        </button>
+                      </form>
+                    )}
+
+                    {/* Pasar a Titular (si es Suplente) */}
+                    {s.status === "substitute" && (
+                      <form action={adminGroupMoveToPlaying}>
+                        <input type="hidden" name="groupId" value={group.id} />
+                        <input type="hidden" name="groupSlug" value={group.slug} />
+                        <input type="hidden" name="matchId" value={match.id} />
+                        <input type="hidden" name="playerId" value={s.playerId} />
+                        <button
+                          type="submit"
+                          className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 px-2 py-1 rounded-lg border border-emerald-300/70 dark:border-emerald-800/70 transition-colors whitespace-nowrap"
+                          title="Pasa este suplente a titular (el último titular pasará a suplente)"
+                        >
+                          A Titular
+                        </button>
+                      </form>
+                    )}
                   
-                  {s.phone && (
-                    <a
-                      href={`https://wa.me/${s.phone}?text=${encodeURIComponent(
-                        `¡Hola ${s.name}! Estás anotado para el partido de ${group.name}. Tu estado actual es: ${
-                          s.status === "playing" ? "Titular" : "Suplente"
-                        }.`
-                      )}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#25D366] hover:bg-[#25D366]/10 p-1.5 rounded-full transition-colors flex items-center justify-center bg-white dark:bg-zinc-700 shadow-sm"
-                      title="Notificar por WhatsApp"
-                    >
-                      <MessageCircle size={18} fill="currentColor" strokeWidth={0} />
-                    </a>
-                  )}
-                  
-                  <form action={adminGroupToggleSignup}>
-                    <input type="hidden" name="groupId" value={group.id} />
-                    <input type="hidden" name="groupSlug" value={group.slug} />
-                    <input type="hidden" name="playerId" value={s.playerId} />
-                    <input type="hidden" name="action" value="remove" />
-                    <button className="text-xs font-semibold text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 px-2 py-1.5 rounded-md transition-colors">
-                      Quitar
-                    </button>
-                  </form>
+                    {s.phone && (
+                      <a
+                        href={`https://wa.me/${s.phone}?text=${encodeURIComponent(
+                          `¡Hola ${s.name}! Estás anotado para el partido de ${group.name}. Tu estado actual es: ${
+                            s.status === "playing" ? "Titular" : "Suplente"
+                          }.`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#25D366] hover:bg-[#25D366]/10 p-1.5 rounded-lg transition-colors flex items-center justify-center bg-white dark:bg-zinc-700 shadow-2xs"
+                        title="Notificar por WhatsApp"
+                      >
+                        <MessageCircle size={15} fill="currentColor" strokeWidth={0} />
+                      </a>
+                    )}
+                    
+                    <form action={adminGroupToggleSignup}>
+                      <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="groupSlug" value={group.slug} />
+                      <input type="hidden" name="matchId" value={match.id} />
+                      <input type="hidden" name="playerId" value={s.playerId} />
+                      <input type="hidden" name="action" value="remove" />
+                      <button
+                        type="submit"
+                        title="Quitar de la lista"
+                        className="text-xs font-bold text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 px-2 py-1 rounded-lg transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </form>
+                  </div>
                 </div>
               </li>
             );
