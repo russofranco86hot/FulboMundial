@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db, groups, subscriptionTransactions } from "@/db";
 import { eq } from "drizzle-orm";
-import { requireSuperAdmin } from "@/lib/superadmin";
+import { requireSuperAdmin, deleteGroupCascade } from "@/lib/superadmin";
 import { getCurrentPlayer } from "@/lib/session";
 
 export async function actionSuperAdminTogglePro(formData: FormData) {
@@ -77,4 +77,31 @@ export async function actionSuperAdminTogglePro(formData: FormData) {
   }
 
   redirect(`/superadmin?updated=${groupId}&mode=${mode}`);
+}
+
+export async function actionSuperAdminDeleteGroup(formData: FormData) {
+  await requireSuperAdmin();
+
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug") || "");
+  const confirmName = String(formData.get("confirmName") || "").trim();
+  const actualName = String(formData.get("actualName") || "").trim();
+
+  if (!groupId) {
+    throw new Error("ID de grupo no especificado.");
+  }
+
+  if (confirmName && actualName && confirmName.toLowerCase() !== actualName.toLowerCase()) {
+    throw new Error("El nombre de confirmación no coincide.");
+  }
+
+  const deleted = await deleteGroupCascade(groupId);
+
+  revalidatePath("/superadmin");
+  revalidatePath("/grupos");
+  if (groupSlug) {
+    revalidatePath(`/grupos/${groupSlug}`);
+  }
+
+  redirect(`/superadmin?deleted=1&deletedName=${encodeURIComponent(deleted.name)}`);
 }

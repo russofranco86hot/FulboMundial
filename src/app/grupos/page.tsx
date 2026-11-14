@@ -3,6 +3,7 @@ import { getSessionUser, getCurrentPlayer, getPlayerGroups } from "@/lib/session
 import { GoogleSignInButton } from "@/components/auth-buttons";
 import { getCurrentMatch } from "@/lib/queries";
 import { getPlayerComment } from "@/lib/player-comments";
+import { TuMomentoMarquee } from "@/components/tu-momento-marquee";
 import { formatArt } from "@/lib/time";
 import Link from "next/link";
 import { PlusCircle, LogIn, ChevronRight, Calendar, Users, Shield, User, Crown } from "lucide-react";
@@ -77,13 +78,27 @@ export default async function GruposPage() {
 
   const groupIds = playerGroups.map((g) => g.id);
 
-  const [primaryComment, openMatchesRows] =
+  const [commentsResults, openMatchesRows] =
     groupIds.length > 0
       ? await Promise.all([
-          getPlayerComment(playerGroups[0].id, player.id, {
-            playerName: player.name,
-            isGoalkeeper: player.isGoalkeeper,
-          }),
+          Promise.all(
+            playerGroups.map(async (g) => {
+              try {
+                const comment = await getPlayerComment(g.id, player.id, {
+                  playerName: player.name,
+                  isGoalkeeper: player.isGoalkeeper,
+                });
+                return {
+                  groupId: g.id,
+                  groupName: g.name,
+                  groupSlug: g.slug,
+                  comment,
+                };
+              } catch {
+                return null;
+              }
+            })
+          ),
           db
             .select({
               id: matches.id,
@@ -97,7 +112,12 @@ export default async function GruposPage() {
             .where(and(inArray(matches.groupId, groupIds), sql`${matches.status} <> 'finished'`))
             .orderBy(matches.matchDate),
         ])
-      : [null, []];
+      : [[], []];
+
+  const validComments = commentsResults.filter(
+    (c): c is { groupId: number; groupName: string; groupSlug: string; comment: string } =>
+      Boolean(c && c.comment && c.comment.trim())
+  );
 
   const openMatchByGroup = new Map<number, (typeof openMatchesRows)[0]>();
   for (const m of openMatchesRows) {
@@ -137,16 +157,7 @@ export default async function GruposPage() {
         </div>
       </div>
 
-      {primaryComment && playerGroups.length > 0 && (
-        <div className="card bg-gradient-to-br from-pitch-900 via-pitch-800 to-zinc-950 text-white border-pitch-600/40 p-3.5 shadow-md rounded-2xl animate-slide-down">
-          <div className="flex items-center gap-2 mb-1.5 text-pitch-300 text-[11px] font-black uppercase tracking-wider">
-            <span>🎙️</span> Tu momento en {playerGroups[0].name}
-          </div>
-          <p className="text-xs sm:text-sm text-pitch-100 font-medium italic bg-white/5 p-2.5 rounded-xl border border-white/10">
-            "{primaryComment}"
-          </p>
-        </div>
-      )}
+      <TuMomentoMarquee items={validComments} />
 
       {playerGroups.length === 0 ? (
         <div className="card text-center space-y-4 animate-slide-up">

@@ -2,8 +2,11 @@ import { notFound, redirect } from "next/navigation";
 import { getGroupBySlug } from "@/lib/groups";
 import { getCurrentPlayer, getPlayerGroupRole } from "@/lib/session";
 import { getSessionUser } from "@/lib/session";
+import { isSuperAdmin } from "@/lib/superadmin";
 import GroupNav from "./group-nav";
 import { GroupRoleSync } from "@/components/group-role-context";
+import Link from "next/link";
+import { Eye } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +25,15 @@ export default async function GroupLayout({
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();
 
-  const player = await getCurrentPlayer();
+  const [player, superAdmin] = await Promise.all([
+    getCurrentPlayer(),
+    isSuperAdmin(),
+  ]);
   const role = player ? await getPlayerGroupRole(group.id) : null;
+  const isReadOnlySuperAdmin = !role && superAdmin;
 
-  // Solo miembros activos pueden ver el grupo
-  if (!role) {
+  // Solo miembros activos pueden ver el grupo (excepto superAdmin en modo lectura)
+  if (!role && !superAdmin) {
     // Verificar si tiene solicitud pendiente
     if (player) {
       const { hasExistingRequest } = await import("@/lib/groups");
@@ -60,8 +67,24 @@ export default async function GroupLayout({
 
   return (
     <div className="space-y-4">
+      {isReadOnlySuperAdmin && (
+        <div className="rounded-2xl bg-amber-500/15 border border-amber-500/40 p-3 text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center justify-between gap-3 shadow-xs animate-slide-down">
+          <div className="flex items-center gap-2">
+            <Eye size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>
+              <strong>Modo Lectura (SuperAdmin):</strong> No sos miembro de este grupo pero estás accediendo en modo auditoría/lectura de dueño.
+            </span>
+          </div>
+          <Link
+            href="/superadmin"
+            className="btn-ghost text-[11px] py-1 px-2.5 rounded-lg border border-amber-500/40 text-amber-900 dark:text-amber-200 shrink-0 font-extrabold hover:bg-amber-500/20"
+          >
+            Panel Dueño
+          </Link>
+        </div>
+      )}
       <GroupRoleSync slug={group.slug} role={role} />
-      <GroupNav group={group} role={role} />
+      <GroupNav group={group} role={role ?? "member"} isSuperAdmin={superAdmin} />
       {children}
     </div>
   );

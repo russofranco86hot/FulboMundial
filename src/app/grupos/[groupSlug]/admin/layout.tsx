@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getGroupBySlug, countPendingRequests } from "@/lib/groups";
 import { isGroupAdmin } from "@/lib/session";
+import { isSuperAdmin } from "@/lib/superadmin";
 import { Shield } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +18,11 @@ export default async function GroupAdminLayout({
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();
 
-  const isAdmin = await isGroupAdmin(group.id);
-  if (!isAdmin) {
+  const [isAdmin, superAdmin] = await Promise.all([
+    isGroupAdmin(group.id),
+    isSuperAdmin(),
+  ]);
+  if (!isAdmin && !superAdmin) {
     redirect(`/grupos/${groupSlug}`);
   }
 

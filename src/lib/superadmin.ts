@@ -1,6 +1,26 @@
 import "server-only";
-import { db, groups, groupMembers, players, matches } from "@/db";
-import { eq, desc, sql } from "drizzle-orm";
+import {
+  db,
+  groups,
+  groupMembers,
+  players,
+  matches,
+  results,
+  matchVotes,
+  playerPayments,
+  matchPayments,
+  matchGoals,
+  attendanceLog,
+  matchNotes,
+  matchThirdHalf,
+  teams,
+  signups,
+  groupPlayerComments,
+  joinRequests,
+  nameChangeRequests,
+  subscriptionTransactions,
+} from "@/db";
+import { eq, desc, sql, inArray } from "drizzle-orm";
 import { getCurrentPlayer, getSessionUser } from "./session";
 import { isGroupPro } from "./billing";
 import { ensureAdminNotifyPreferenceColumn } from "./db-migrations";
@@ -48,6 +68,28 @@ export async function requireSuperAdmin(): Promise<void> {
   }
 }
 
+export interface SuperAdminGroupMember {
+  playerId: number;
+  name: string;
+  email: string | null;
+  role: string;
+  status: string;
+  joinedAt: Date | null;
+  stars: number;
+  isGoalkeeper: boolean;
+  preferredPosition: string | null;
+}
+
+export interface SuperAdminGroupMatch {
+  id: number;
+  matchDate: Date;
+  status: string;
+  format: string;
+  scoreA: number | null;
+  scoreB: number | null;
+  result: string | null;
+}
+
 export interface SuperAdminGroupRow {
   id: number;
   name: string;
@@ -64,9 +106,48 @@ export interface SuperAdminGroupRow {
   matchCount: number;
   lastMatchDate: Date | null;
   admins: { playerId: number; name: string; email: string | null }[];
+  members: SuperAdminGroupMember[];
+  matches: SuperAdminGroupMatch[];
 }
 
-export async function getSuperAdminDashboardData() {
+export interface SuperAdminAllPlayer {
+  id: number;
+  name: string;
+  email: string | null;
+  stars: number;
+  isGoalkeeper: boolean;
+  preferredPosition: string | null;
+  createdAt: Date;
+  groupNames: string[];
+}
+
+export interface SuperAdminRecentMatch {
+  id: number;
+  groupId: number | null;
+  groupName: string;
+  groupSlug: string;
+  matchDate: Date;
+  status: string;
+  format: string;
+  scoreA: number | null;
+  scoreB: number | null;
+  result: string | null;
+}
+
+export interface SuperAdminDashboardData {
+  groups: SuperAdminGroupRow[];
+  allPlayers: SuperAdminAllPlayer[];
+  recentMatches: SuperAdminRecentMatch[];
+  kpis: {
+    totalGroups: number;
+    proGroupsCount: number;
+    freeGroupsCount: number;
+    totalPlayers: number;
+    totalMatches: number;
+  };
+}
+
+export async function getSuperAdminDashboardData(): Promise<SuperAdminDashboardData> {
   await requireSuperAdmin();
   await ensureAdminNotifyPreferenceColumn();
 
@@ -80,22 +161,41 @@ export async function getSuperAdminDashboardData() {
       email: players.email,
       role: groupMembers.role,
       status: groupMembers.status,
+      joinedAt: groupMembers.joinedAt,
+      stars: players.stars,
+      isGoalkeeper: players.isGoalkeeper,
+      preferredPosition: players.preferredPosition,
     })
     .from(groupMembers)
     .innerJoin(players, eq(players.id, groupMembers.playerId));
 
-  const matchStatsRows = await db
+  const allMatchesRows = await db
     .select({
+      id: matches.id,
       groupId: matches.groupId,
-      count: sql<number>`count(*)::int`,
-      lastMatchDate: sql<string | null>`max(${matches.matchDate})`,
+      matchDate: matches.matchDate,
+      status: matches.status,
+      format: matches.format,
+      scoreA: results.scoreA,
+      scoreB: results.scoreB,
+      result: results.result,
     })
     .from(matches)
-    .groupBy(matches.groupId);
+    .leftJoin(results, eq(matches.id, results.matchId))
+    .orderBy(desc(matches.matchDate));
 
-  const [{ totalPlayers }] = await db
-    .select({ totalPlayers: sql<number>`count(*)::int` })
-    .from(players);
+  const allPlayersList = await db
+    .select({
+      id: players.id,
+      name: players.name,
+      email: players.email,
+      stars: players.stars,
+      isGoalkeeper: players.isGoalkeeper,
+      preferredPosition: players.preferredPosition,
+      createdAt: players.createdAt,
+    })
+    .from(players)
+    .orderBy(desc(players.id));
 
   const whitelist = new Set(
     (process.env.PRO_WHITELIST_SLUGS || "")
@@ -104,15 +204,29 @@ export async function getSuperAdminDashboardData() {
       .filter(Boolean)
   );
 
-  const matchMap = new Map<number, { count: number; lastMatchDate: Date | null }>();
-  for (const m of matchStatsRows) {
-    if (m.groupId !== null) {
-      matchMap.set(m.groupId, {
-        count: m.count,
-        lastMatchDate: m.lastMatchDate ? new Date(m.lastMatchDate) : null,
-      });
+  const groupMap = new Map<number, string>(allGroups.map((g) => [g.id, g.name]));
+  const playerGroupsMap = new Map<number, string[]>();
+  for (const m of memberRows) {
+    if (m.status === "active") {
+      const gName = groupMap.get(m.groupId);
+      if (gName) {
+        const list = playerGroupsMap.get(m.playerId) || [];
+        list.push(gName);
+        playerGroupsMap.set(m.playerId, list);
+      }
     }
   }
+
+  const allPlayers: SuperAdminAllPlayer[] = allPlayersList.map((p) => ({
+    id: p.id,
+    name: p.name,
+    email: p.email,
+    stars: Number(p.stars || 0),
+    isGoalkeeper: p.isGoalkeeper,
+    preferredPosition: p.preferredPosition,
+    createdAt: p.createdAt,
+    groupNames: playerGroupsMap.get(p.id) || [],
+  }));
 
   const enrichedGroups: SuperAdminGroupRow[] = allGroups.map((g) => {
     const gMembers = memberRows.filter(
@@ -126,7 +240,9 @@ export async function getSuperAdminDashboardData() {
         email: m.email,
       }));
 
-    const mStat = matchMap.get(g.id) ?? { count: 0, lastMatchDate: null };
+    const gMatches = allMatchesRows.filter((m) => m.groupId === g.id);
+    const lastMatch = gMatches[0] ?? null;
+
     const isWhitelistPro = whitelist.has(g.slug.toLowerCase());
     const effectiveIsPro = isGroupPro(g);
 
@@ -143,23 +259,111 @@ export async function getSuperAdminDashboardData() {
       proPlan: g.proPlan,
       proExpiresAt: g.proExpiresAt,
       memberCount: gMembers.length,
-      matchCount: mStat.count,
-      lastMatchDate: mStat.lastMatchDate,
+      matchCount: gMatches.length,
+      lastMatchDate: lastMatch ? lastMatch.matchDate : null,
       admins,
+      members: gMembers.map((m) => ({
+        playerId: m.playerId,
+        name: m.name,
+        email: m.email,
+        role: m.role,
+        status: m.status,
+        joinedAt: m.joinedAt,
+        stars: Number(m.stars || 0),
+        isGoalkeeper: m.isGoalkeeper,
+        preferredPosition: m.preferredPosition,
+      })),
+      matches: gMatches.map((m) => ({
+        id: m.id,
+        matchDate: m.matchDate,
+        status: m.status,
+        format: m.format,
+        scoreA: m.scoreA,
+        scoreB: m.scoreB,
+        result: m.result,
+      })),
     };
   });
 
-  const totalMatches = enrichedGroups.reduce((acc, g) => acc + g.matchCount, 0);
+  const totalMatches = allMatchesRows.length;
   const proGroupsCount = enrichedGroups.filter((g) => g.effectiveIsPro).length;
+
+  const recentMatches: SuperAdminRecentMatch[] = allMatchesRows.slice(0, 50).map((m) => {
+    const grp = allGroups.find((g) => g.id === m.groupId);
+    return {
+      id: m.id,
+      groupId: m.groupId,
+      groupName: grp ? grp.name : "Desconocido",
+      groupSlug: grp ? grp.slug : "",
+      matchDate: m.matchDate,
+      status: m.status,
+      format: m.format,
+      scoreA: m.scoreA,
+      scoreB: m.scoreB,
+      result: m.result,
+    };
+  });
 
   return {
     groups: enrichedGroups,
+    allPlayers,
+    recentMatches,
     kpis: {
       totalGroups: enrichedGroups.length,
       proGroupsCount,
       freeGroupsCount: enrichedGroups.length - proGroupsCount,
-      totalPlayers,
+      totalPlayers: allPlayers.length,
       totalMatches,
     },
   };
+}
+
+/**
+ * Elimina un grupo y limpia todas sus dependencias en cascada de manera segura.
+ */
+export async function deleteGroupCascade(groupId: number): Promise<{ name: string; slug: string }> {
+  await requireSuperAdmin();
+
+  const [targetGroup] = await db
+    .select({ id: groups.id, name: groups.name, slug: groups.slug })
+    .from(groups)
+    .where(eq(groups.id, groupId))
+    .limit(1);
+
+  if (!targetGroup) {
+    throw new Error(`Grupo #${groupId} no encontrado.`);
+  }
+
+  // 1. Partidos pertenecientes al grupo
+  const groupMatches = await db
+    .select({ id: matches.id })
+    .from(matches)
+    .where(eq(matches.groupId, groupId));
+  const matchIds = groupMatches.map((m) => m.id);
+
+  if (matchIds.length > 0) {
+    await db.delete(matchVotes).where(inArray(matchVotes.matchId, matchIds));
+    await db.delete(playerPayments).where(inArray(playerPayments.matchId, matchIds));
+    await db.delete(matchPayments).where(inArray(matchPayments.matchId, matchIds));
+    await db.delete(matchGoals).where(inArray(matchGoals.matchId, matchIds));
+    await db.delete(attendanceLog).where(inArray(attendanceLog.matchId, matchIds));
+    await db.delete(matchNotes).where(inArray(matchNotes.matchId, matchIds));
+    await db.delete(matchThirdHalf).where(inArray(matchThirdHalf.matchId, matchIds));
+    await db.delete(teams).where(inArray(teams.matchId, matchIds));
+    await db.delete(results).where(inArray(results.matchId, matchIds));
+    await db.delete(signups).where(inArray(signups.matchId, matchIds));
+    await db.delete(matches).where(inArray(matches.id, matchIds));
+  }
+
+  // 2. Tablas asociadas a groups
+  await db.delete(groupPlayerComments).where(eq(groupPlayerComments.groupId, groupId));
+  await db.delete(joinRequests).where(eq(joinRequests.groupId, groupId));
+  await db.delete(nameChangeRequests).where(eq(nameChangeRequests.groupId, groupId));
+  await db.delete(subscriptionTransactions).where(eq(subscriptionTransactions.groupId, groupId));
+  await db.delete(groupMembers).where(eq(groupMembers.groupId, groupId));
+
+  // 3. Eliminar el grupo
+  await db.delete(groups).where(eq(groups.id, groupId));
+
+  return targetGroup;
 }

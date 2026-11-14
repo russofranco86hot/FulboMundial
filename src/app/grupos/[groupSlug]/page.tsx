@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getGroupBySlug } from "@/lib/groups";
-import { getCurrentPlayer } from "@/lib/session";
+import { getCurrentPlayer, getPlayerGroupRole } from "@/lib/session";
+import { isSuperAdmin } from "@/lib/superadmin";
 import { getCurrentMatch, getSelection, getStandings, getLastFinishedMatch } from "@/lib/queries";
 import { getPlayerComment } from "@/lib/player-comments";
 import { formatArt } from "@/lib/time";
@@ -30,8 +31,14 @@ export default async function GroupHomePage({
   const group = await getGroupBySlug(groupSlug);
   if (!group) return notFound();
 
-  const player = await getCurrentPlayer();
+  const [player, superAdmin] = await Promise.all([
+    getCurrentPlayer(),
+    isSuperAdmin(),
+  ]);
   if (!player) return null; // Layout ya maneja el acceso
+
+  const role = await getPlayerGroupRole(group.id);
+  const isReadOnlySuperAdmin = !role && superAdmin;
 
   const [standings, lastFinished, match] = await Promise.all([
     getStandings(group.id),
@@ -267,7 +274,16 @@ export default async function GroupHomePage({
       {/* Mi estado + botón */}
       {!isFinished && (
         <div className="card space-y-4 animate-slide-up">
-          <StatusBadge mine={mine} isOpen={isOpen} />
+          {isReadOnlySuperAdmin ? (
+            <div className="text-center py-1">
+              <span className="chip bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-bold text-xs inline-flex items-center gap-1.5">
+                <span>👁️</span> Modo Lectura (SuperAdmin)
+              </span>
+            </div>
+          ) : (
+            <StatusBadge mine={mine} isOpen={isOpen} />
+          )}
+
           <div className="w-full">
             <div className="flex justify-between text-xs text-pitch-900/60 dark:text-zinc-400 mb-1.5 px-1 font-medium">
               <span>Ocupación</span>
@@ -280,11 +296,20 @@ export default async function GroupHomePage({
               />
             </div>
           </div>
-          <SignupButton signedUp={signedUp} disabled={!isOpen && !signedUp} groupId={group.id} groupSlug={groupSlug} />
-          {!isOpen && !signedUp && (
-            <p className="text-center text-xs text-pitch-900/50 dark:text-zinc-500">
-              La lista está cerrada; no podés anotarte. Hablá con el admin.
-            </p>
+
+          {isReadOnlySuperAdmin ? (
+            <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-3 text-center text-xs font-bold text-amber-800 dark:text-amber-200">
+              Estás visualizando este partido en modo auditoría. No podés anotarte porque no formás parte del grupo.
+            </div>
+          ) : (
+            <>
+              <SignupButton signedUp={signedUp} disabled={!isOpen && !signedUp} groupId={group.id} groupSlug={groupSlug} />
+              {!isOpen && !signedUp && (
+                <p className="text-center text-xs text-pitch-900/50 dark:text-zinc-500">
+                  La lista está cerrada; no podés anotarte. Hablá con el admin.
+                </p>
+              )}
+            </>
           )}
         </div>
       )}
@@ -301,7 +326,7 @@ export default async function GroupHomePage({
           paidCount={paidCount}
           totalPlayers={match.capacity}
           myStatus={myPayment ? { paid: myPayment.paid, notified: myPayment.notified } : null}
-          canPay={signedUp}
+          canPay={signedUp && !isReadOnlySuperAdmin}
         />
       )}
 

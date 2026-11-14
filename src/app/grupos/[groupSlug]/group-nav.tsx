@@ -8,9 +8,10 @@ import type { Group } from "@/db/schema";
 interface GroupNavProps {
   group: Group;
   role: "admin" | "member";
+  isSuperAdmin?: boolean;
 }
 
-export default function GroupNav({ group, role }: GroupNavProps) {
+export default function GroupNav({ group, role, isSuperAdmin }: GroupNavProps) {
   const pathname = usePathname();
   const base = `/grupos/${group.slug}`;
 
@@ -19,7 +20,15 @@ export default function GroupNav({ group, role }: GroupNavProps) {
     { href: `${base}/equipos`, label: "Equipos", icon: Users },
     { href: `${base}/historial`, label: "Historial", icon: Trophy },
     { href: `${base}/estadisticas`, label: "Estadísticas", icon: TrendingUp },
-    ...(role === "admin" ? [{ href: `${base}/admin`, label: "Admin", icon: Settings }] : []),
+    ...(role === "admin" || isSuperAdmin
+      ? [
+          {
+            href: `${base}/admin`,
+            label: isSuperAdmin && role !== "admin" ? "Admin (Audit)" : "Admin",
+            icon: Settings,
+          },
+        ]
+      : []),
   ];
 
   return (
