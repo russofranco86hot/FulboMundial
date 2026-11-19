@@ -11,7 +11,7 @@ import { pushToAll, pushToGroupMembers } from "@/lib/push";
 import { computeSelection } from "@/lib/selection";
 import { getAdvancedStats } from "@/lib/stats";
 import { notifyMatchCompletionAndAchievements } from "@/lib/achievements";
-import { artWallTimeToUtc, formatArt } from "@/lib/time";
+import { artWallTimeToUtc, formatArt, nextGroupMatchDate } from "@/lib/time";
 
 import { savePlayerComment, regenerateAllGroupComments } from "@/lib/player-comments";
 import { saveMatchPaymentConfig, adminTogglePlayerPaid } from "@/lib/payments";
@@ -609,6 +609,9 @@ export async function adminGroupSaveResult(formData: FormData) {
   if (att.length) await db.insert(attendanceLog).values(att);
 
   const wasAlreadyFinished = match.status === "finished";
+  if (match.status === "open") {
+    await recomputeFinalStatuses(match);
+  }
   await db.update(matches).set({ status: "finished" }).where(eq(matches.id, match.id));
 
   const { groups } = await import("@/db/schema");
@@ -659,14 +662,14 @@ export async function adminGroupSaveResult(formData: FormData) {
     console.error("Error regenerating player comments after match:", err);
   }
 
+  const isFinalChampionshipMatch = isLastChampionshipMatch(
+    match.matchDate,
+    groupRow?.championshipEndDate,
+    groupRow?.defaultDayOfWeek
+  );
+
   // Si este partido cierra el campeonato, generar el resumen oficial en base a notas y votaciones
-  if (
-    isLastChampionshipMatch(
-      match.matchDate,
-      groupRow?.championshipEndDate,
-      groupRow?.defaultDayOfWeek
-    )
-  ) {
+  if (isFinalChampionshipMatch) {
     try {
       await generateChampionshipSummary(groupId);
       if (!wasAlreadyFinished || !groupRow?.championshipSummary) {
@@ -682,8 +685,45 @@ export async function adminGroupSaveResult(formData: FormData) {
     }
   }
 
+  // Si no terminó el campeonato y no hay otro partido activo, abrir automáticamente el siguiente
+  let nextMatchId: number | null = null;
+  if (!isFinalChampionshipMatch) {
+    try {
+      const existingActive = await db
+        .select({ id: matches.id })
+        .from(matches)
+        .where(and(eq(matches.groupId, groupId), sql`${matches.status} <> 'finished'`))
+        .limit(1);
+
+      if (existingActive.length === 0) {
+        const nextDate = nextGroupMatchDate(
+          groupRow?.defaultDayOfWeek,
+          groupRow?.defaultTime ?? "21:00",
+          new Date(),
+          match.matchDate
+        );
+        const nextMatch = await openNextMatch({
+          groupId,
+          matchDate: nextDate,
+          capacity: groupRow?.defaultCapacity ?? match.capacity,
+          format: groupRow?.format ?? match.format,
+          teamAName: groupRow?.teamAName ?? match.teamAName ?? undefined,
+          teamBName: groupRow?.teamBName ?? match.teamBName ?? undefined,
+          notify: true,
+        });
+        nextMatchId = nextMatch.id;
+      }
+    } catch (err) {
+      console.error("[adminGroupSaveResult] Error abriendo el siguiente partido:", err);
+    }
+  }
+
   refreshGroup(groupSlug);
-  redirect(`/grupos/${groupSlug}/admin/resultado?saved=1&matchId=${match.id}`);
+  redirect(
+    `/grupos/${groupSlug}/admin/resultado?saved=1&matchId=${match.id}${
+      nextMatchId ? `&nextMatchId=${nextMatchId}` : ""
+    }`
+  );
 }
 
 // ─── Configuración del grupo ──────────────────────────────────────────────

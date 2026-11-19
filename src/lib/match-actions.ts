@@ -131,19 +131,19 @@ export async function openNextMatch(opts: {
       await pushToGroupMembers(targetGroupId, {
         title: isLast
           ? "🏆 ¡ÚLTIMA FECHA DEL CAMPEONATO! Se abrió la lista ⚽"
-          : "¡Se abrió la lista! ⚽",
+          : "¡Se abrió la lista para el próximo partido! ⚽",
         body: isLast
-          ? `Es el último partido del campeonato en ${groupMeta?.name || "el grupo"} (${dateStr}). ¡No te quedes afuera del cierre!`
-          : `Anotate para el ${dateStr}.`,
+          ? `Es el último partido del campeonato en ${groupMeta?.name || "el grupo"} (${dateStr}). ¡Anotate ahora!`
+          : `Ya podés anotarte en ${groupMeta?.name || "el grupo"} para el ${dateStr}. ¡No te quedes afuera!`,
         url: targetUrl,
-        tag: "lista-abierta",
+        tag: `lista-abierta-${match.id}`,
       });
     } else {
       await pushToAll({
-        title: "¡Se abrió la lista! ⚽",
-        body: `Anotate para el ${dateStr}.`,
+        title: "¡Se abrió la lista para el próximo partido! ⚽",
+        body: `Ya podés anotarte para el ${dateStr}. ¡No te quedes afuera!`,
         url: "/",
-        tag: "lista-abierta",
+        tag: `lista-abierta-${match.id}`,
       });
     }
   }

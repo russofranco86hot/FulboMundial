@@ -1,7 +1,7 @@
 
 import { rpcRevalidatePath as revalidatePath } from "../redirect";
 import { rpcRedirect as redirect } from "../redirect";
-import { and, asc, eq, gt, lt, desc } from "drizzle-orm";
+import { and, asc, eq, gt, lt, desc, sql } from "drizzle-orm";
 import { db, players, matches, signups, teams, results, attendanceLog } from "@/db";
 import {
   checkAdminPassword,
@@ -433,6 +433,9 @@ export async function adminSaveResult(formData: FormData) {
     .map((t) => ({ playerId: t.playerId as number, matchId: match.id, attended: true }));
   if (att.length) await db.insert(attendanceLog).values(att);
 
+  if (match.status === "open") {
+    await recomputeFinalStatuses(match);
+  }
   await db.update(matches).set({ status: "finished" }).where(eq(matches.id, match.id));
 
   // Notificar alerta a todos (partido finalizado con link a la crónica y votación)
@@ -445,6 +448,27 @@ export async function adminSaveResult(formData: FormData) {
     oldStandings,
     oldStats,
   });
+
+  // Abrir automáticamente el siguiente partido si no queda ninguno abierto/cerrado
+  try {
+    const activeCond = match.groupId
+      ? and(eq(matches.groupId, match.groupId), sql`${matches.status} <> 'finished'`)
+      : sql`${matches.status} <> 'finished'`;
+    const existingActive = await db
+      .select({ id: matches.id })
+      .from(matches)
+      .where(activeCond)
+      .limit(1);
+
+    if (existingActive.length === 0) {
+      await openNextMatch({
+        groupId: match.groupId ?? undefined,
+        notify: true,
+      });
+    }
+  } catch (err) {
+    console.error("[adminSaveResult] Error abriendo el siguiente partido:", err);
+  }
 
   refresh();
   redirect("/admin/resultado?saved=1");

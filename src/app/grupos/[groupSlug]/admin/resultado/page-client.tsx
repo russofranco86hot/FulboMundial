@@ -46,6 +46,7 @@ function GroupAdminResultadoContent() {
   const searchParams = useSearchParams();
   const saved = searchParams.get("saved");
   const matchIdParam = searchParams.get("matchId");
+  const nextMatchId = searchParams.get("nextMatchId");
   const remindedVote = searchParams.get("remindedVote");
 
   const qs = matchIdParam ? `?matchId=${encodeURIComponent(matchIdParam)}` : "";
@@ -107,9 +108,22 @@ function GroupAdminResultadoContent() {
   return (
     <div className="space-y-4 animate-fade-in">
       {saved === "1" && (
-        <div className="rounded-2xl bg-green-500/15 p-4 text-sm font-semibold text-green-800 dark:text-green-300 border border-green-500/30 flex items-center gap-3 shadow-glow-green animate-scale-in">
-          <CheckCircle className="text-green-600 dark:text-green-400 shrink-0" size={24} />
-          <span>¡Resultado y equipos guardados con éxito! Ya podés compartir la Placa Oficial en WhatsApp abajo.</span>
+        <div className="rounded-2xl bg-green-500/15 p-4 text-sm font-semibold text-green-800 dark:text-green-300 border border-green-500/30 flex items-start gap-3 shadow-glow-green animate-scale-in">
+          <CheckCircle className="text-green-600 dark:text-green-400 shrink-0 mt-0.5" size={24} />
+          <div className="space-y-1 flex-1">
+            <p>¡Resultado y nota guardados con éxito! El partido quedó finalizado.</p>
+            {nextMatchId && (
+              <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                🔔 Ya se abrió automáticamente la inscripción del próximo partido y se envió la notificación Push a todos los miembros.{" "}
+                <Link
+                  href={`/grupos/${groupSlug}/admin/partido?matchId=${nextMatchId}`}
+                  className="underline hover:opacity-80"
+                >
+                  Ver nueva lista abierta →
+                </Link>
+              </p>
+            )}
+          </div>
         </div>
       )}
       {remindedVote === "1" && (
