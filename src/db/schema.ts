@@ -70,6 +70,10 @@ export const groups = pgTable(
     teamBName: text("team_b_name").notNull().default("Oscuro"),
     // Preferencias de notificaciones de administración
     adminNotifyPreference: text("admin_notify_preference").notNull().default("both"), // 'both' | 'email' | 'push' | 'none'
+    // Orden de criterios para selección de titulares/suplentes
+    signupPriorityOrder: text("signup_priority_order")
+      .notNull()
+      .default("historicos,presencia,tabla,llegada"),
     // Campeonato (nombre, fecha fin, inicio del ciclo actual, resumen e historial estático)
     championshipName: text("championship_name"),
     championshipEndDate: text("championship_end_date"), // "YYYY-MM-DD"

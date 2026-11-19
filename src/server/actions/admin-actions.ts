@@ -9,11 +9,10 @@ import {
   endAdminSession,
   requireAdmin,
 } from "@/lib/admin";
-import { getCurrentMatch, getStandings } from "@/lib/queries";
+import { getCurrentMatch, getSelection, getStandings } from "@/lib/queries";
 import { openNextMatch, closeSignups, recomputeFinalStatuses } from "@/lib/match-actions";
 import { buildBalancedTeams, type TeamPlayer } from "@/lib/teams";
 import { pushToAll } from "@/lib/push";
-import { computeSelection } from "@/lib/selection";
 import { getAdvancedStats } from "@/lib/stats";
 import { notifyMatchCompletionAndAchievements } from "@/lib/achievements";
 
@@ -231,24 +230,8 @@ export async function adminGenerateTeams(formData: FormData) {
   if (!match) return;
   const seed = Number(formData.get("seed")) || Math.floor((Date.now() % 100000) + 1);
 
-  // Titulares por prioridad
-  const active = await db
-    .select({
-      playerId: signups.playerId,
-      priorityOrder: players.priorityOrder,
-      signupAt: signups.signupAt,
-      name: players.name,
-      stars: players.stars,
-      isGoalkeeper: players.isGoalkeeper,
-    })
-    .from(signups)
-    .innerJoin(players, eq(players.id, signups.playerId))
-    .where(and(eq(signups.matchId, match.id), eq(signups.withdrawn, false)));
-
-  const selection = computeSelection(
-    active.map((a) => ({ ...a, signupAt: a.signupAt })),
-    match.capacity
-  ).filter((s) => s.status === "playing");
+  // Titulares por prioridad configurada
+  const selection = (await getSelection(match)).filter((s) => s.status === "playing");
 
   // Invitados ya cargados en este partido (filas de teams marcadas isGuest)
   const guestRows = await db

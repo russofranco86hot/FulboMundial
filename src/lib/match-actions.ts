@@ -2,20 +2,15 @@ import { db, matches, signups, type Match } from "@/db";
 import { and, eq } from "drizzle-orm";
 import { artWallTimeToUtc, ART_TZ, formatArt } from "./time";
 import { toZonedTime } from "date-fns-tz";
-import { getActiveSignups } from "./queries";
-import { computeSelection } from "./selection";
+import { getSelection } from "./queries";
 import { pushToAll, pushToGroupMembers, pushToPlayer } from "./push";
 import { isLastChampionshipMatch } from "./championship";
 
 /**
- * Calcula la ventana de inscripción para un partido.
+ * Calcula la ventana de inscripción para un partido (cierra 24 hs antes).
  */
 export function signupWindow(matchDate: Date): { opensAt: Date; closesAt: Date } {
-  const z = toZonedTime(matchDate, ART_TZ);
-  const y = z.getFullYear();
-  const mo = z.getMonth() + 1;
-  const d = z.getDate();
-  const closesAt = artWallTimeToUtc(y, mo, d, 12, 0);
+  const closesAt = new Date(matchDate.getTime() - 24 * 60 * 60 * 1000);
   const prev = new Date(matchDate.getTime() - 7 * 24 * 60 * 60 * 1000);
   const pz = toZonedTime(prev, ART_TZ);
   const opensAt = artWallTimeToUtc(pz.getFullYear(), pz.getMonth() + 1, pz.getDate(), 23, 0);
@@ -154,8 +149,7 @@ export async function openNextMatch(opts: {
  * Recalcula titulares/suplentes (final_status) de un partido.
  */
 export async function recomputeFinalStatuses(match: Match) {
-  const active = await getActiveSignups(match.id);
-  const selection = computeSelection(active, match.capacity);
+  const selection = await getSelection(match);
   for (const row of selection) {
     await db
       .update(signups)

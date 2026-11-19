@@ -8,7 +8,7 @@ import { getCurrentMatch, getStandings, getSelection } from "@/lib/queries";
 import { openNextMatch, closeSignups, recomputeFinalStatuses } from "@/lib/match-actions";
 import { buildBalancedTeams, type TeamPlayer } from "@/lib/teams";
 import { pushToAll, pushToGroupMembers } from "@/lib/push";
-import { computeSelection } from "@/lib/selection";
+import { parseSignupPriorityOrder } from "@/lib/selection";
 import { getAdvancedStats } from "@/lib/stats";
 import { notifyMatchCompletionAndAchievements } from "@/lib/achievements";
 import { artWallTimeToUtc, formatArt, nextGroupMatchDate } from "@/lib/time";
@@ -390,25 +390,7 @@ export async function adminGroupGenerateTeams(formData: FormData) {
   if (!match) return;
   const seed = Number(formData.get("seed")) || Math.floor((Date.now() % 100000) + 1);
 
-  const active = await db
-    .select({
-      playerId: signups.playerId,
-      priorityOrder: players.priorityOrder,
-      signupAt: signups.signupAt,
-      name: players.name,
-      stars: players.stars,
-      isGoalkeeper: players.isGoalkeeper,
-      preferredPosition: players.preferredPosition,
-      preferredFoot: players.preferredFoot,
-    })
-    .from(signups)
-    .innerJoin(players, eq(players.id, signups.playerId))
-    .where(and(eq(signups.matchId, match.id), eq(signups.withdrawn, false)));
-
-  const selection = computeSelection(
-    active.map((a) => ({ ...a, signupAt: a.signupAt })),
-    match.capacity
-  ).filter((s) => s.status === "playing");
+  const selection = (await getSelection(match)).filter((s) => s.status === "playing");
 
   const guestRows = await db
     .select({
@@ -749,6 +731,8 @@ export async function adminGroupSaveSettings(formData: FormData) {
   const teamAName = String(formData.get("teamAName") || "Claro").trim();
   const teamBName = String(formData.get("teamBName") || "Oscuro").trim();
   const adminNotifyPreference = String(formData.get("adminNotifyPreference") || "both").trim();
+  const rawSignupPriorityOrder = String(formData.get("signupPriorityOrder") || "").trim();
+  const signupPriorityOrder = parseSignupPriorityOrder(rawSignupPriorityOrder).join(",");
   const rawChampionshipName = String(formData.get("championshipName") || "").trim();
   const championshipName = rawChampionshipName || null;
   const rawChampionshipEndDate = String(formData.get("championshipEndDate") || "").trim();
@@ -766,6 +750,7 @@ export async function adminGroupSaveSettings(formData: FormData) {
     teamAName,
     teamBName,
     adminNotifyPreference,
+    signupPriorityOrder,
     championshipName,
     championshipEndDate,
   };
@@ -778,12 +763,12 @@ export async function adminGroupSaveSettings(formData: FormData) {
     await db.update(groups).set(updatePayload).where(eq(groups.id, groupId));
   }
 
-  if (championshipEndDate) {
-    try {
-      const activeMatch = await getCurrentMatch(groupId);
+  try {
+    const activeMatch = await getCurrentMatch(groupId);
+    if (activeMatch && activeMatch.status !== "finished") {
+      await recomputeFinalStatuses(activeMatch);
       if (
-        activeMatch &&
-        activeMatch.status !== "finished" &&
+        championshipEndDate &&
         isLastChampionshipMatch(activeMatch.matchDate, championshipEndDate, defaultDayOfWeek)
       ) {
         await pushToGroupMembers(groupId, {
@@ -793,9 +778,9 @@ export async function adminGroupSaveSettings(formData: FormData) {
           tag: `championship-last-${groupId}-${activeMatch.id}`,
         });
       }
-    } catch (err) {
-      console.warn("[adminGroupSaveSettings] Error notifying last championship match:", err);
     }
+  } catch (err) {
+    console.warn("[adminGroupSaveSettings] Error updating active match after settings save:", err);
   }
 
   refreshGroup(groupSlug);

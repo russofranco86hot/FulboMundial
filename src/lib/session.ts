@@ -209,6 +209,7 @@ async function queryPlayerGroups(playerId: number) {
       teamAName: groups.teamAName,
       teamBName: groups.teamBName,
       adminNotifyPreference: groups.adminNotifyPreference,
+      signupPriorityOrder: groups.signupPriorityOrder,
       championshipName: groups.championshipName,
       championshipEndDate: groups.championshipEndDate,
       championshipStartedAt: groups.championshipStartedAt,

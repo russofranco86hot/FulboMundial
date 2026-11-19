@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { formatArt, nextGroupMatchDate } from "@/lib/time";
 import { waListMessage, waTeamsMessage } from "@/lib/whatsapp";
+import { parseSignupPriorityOrder, SIGNUP_CRITERIA_META } from "@/lib/selection";
 import {
   adminOpenGroupMatch,
   adminGroupToggleSignup,
@@ -55,6 +56,7 @@ type AdminPartidoData = {
     defaultTime: string | null;
     teamAName: string | null;
     teamBName: string | null;
+    signupPriorityOrder?: string | null;
   };
   allGroupMatches?: {
     id: number;
@@ -407,32 +409,49 @@ function GroupAdminPartidoContent() {
       </details>
 
       <div className="card">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div>
-            <h3 className="font-bold text-pitch-800 dark:text-pitch-100 flex items-center gap-2">
-              Lista ({selection.length} anotados)
-            </h3>
-            <p className="text-[11px] text-pitch-900/60 dark:text-zinc-400">
-              {selection.some((s) => s.manualOrder !== null && s.manualOrder !== undefined)
-                ? "⚡ Orden manual activo asignado por el admin."
-                : "⏱️ Orden automático por llegada (hora de inscripción)."}
-            </p>
-          </div>
-          {selection.some((s) => s.manualOrder !== null && s.manualOrder !== undefined) && (
-            <form action={adminGroupResetSignupsOrder}>
-              <input type="hidden" name="groupId" value={group.id} />
-              <input type="hidden" name="groupSlug" value={group.slug} />
-              <input type="hidden" name="matchId" value={match.id} />
-              <button
-                type="submit"
-                className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-pitch-600 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
-                title="Restablece el orden al orden de llegada original de inscripción"
-              >
-                <RotateCcw size={12} /> Restablecer a orden de llegada
-              </button>
-            </form>
-          )}
-        </div>
+        {(() => {
+          const activeOrder = parseSignupPriorityOrder(group.signupPriorityOrder);
+          const orderSummary = activeOrder
+            .map((c, idx) => `${idx + 1}° ${SIGNUP_CRITERIA_META[c].shortLabel}`)
+            .join(" → ");
+          const hasManualOrder = selection.some(
+            (s) => s.manualOrder !== null && s.manualOrder !== undefined
+          );
+          return (
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div>
+                <h3 className="font-bold text-pitch-800 dark:text-pitch-100 flex items-center gap-2">
+                  Lista ({selection.length} anotados)
+                </h3>
+                <p className="text-[11px] text-pitch-900/60 dark:text-zinc-400">
+                  {hasManualOrder
+                    ? `⚡ Orden manual activo asignado por el admin (sobre: ${orderSummary}).`
+                    : `📋 Orden activo (cierre 24hs antes): ${orderSummary}.`}{" "}
+                  <Link
+                    href={`/grupos/${group.slug}/admin/configuracion`}
+                    className="underline font-semibold text-pitch-700 dark:text-pitch-400 hover:opacity-80"
+                  >
+                    Configurar orden
+                  </Link>
+                </p>
+              </div>
+              {hasManualOrder && (
+                <form action={adminGroupResetSignupsOrder}>
+                  <input type="hidden" name="groupId" value={group.id} />
+                  <input type="hidden" name="groupSlug" value={group.slug} />
+                  <input type="hidden" name="matchId" value={match.id} />
+                  <button
+                    type="submit"
+                    className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-pitch-600 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
+                    title="Restablece al orden configurado del grupo"
+                  >
+                    <RotateCcw size={12} /> Restablecer al orden configurado
+                  </button>
+                </form>
+              )}
+            </div>
+          );
+        })()}
 
         <ul className="space-y-1.5 text-sm">
           {selection.map((s, i) => {

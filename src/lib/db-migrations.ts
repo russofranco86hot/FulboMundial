@@ -16,6 +16,7 @@ export async function ensureAdminNotifyPreferenceColumn(force = false): Promise<
     await db.execute(sql`
       ALTER TABLE groups 
         ADD COLUMN IF NOT EXISTS admin_notify_preference TEXT NOT NULL DEFAULT 'both',
+        ADD COLUMN IF NOT EXISTS signup_priority_order TEXT NOT NULL DEFAULT 'historicos,presencia,tabla,llegada',
         ADD COLUMN IF NOT EXISTS championship_name TEXT,
         ADD COLUMN IF NOT EXISTS championship_end_date TEXT,
         ADD COLUMN IF NOT EXISTS championship_started_at TIMESTAMPTZ,
@@ -105,6 +106,7 @@ async function runMigrationsOnce(): Promise<void> {
     await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS championship_started_at TIMESTAMPTZ;`);
     await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS championship_summary TEXT;`);
     await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS championship_history JSONB;`);
+    await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS signup_priority_order TEXT NOT NULL DEFAULT 'historicos,presencia,tabla,llegada';`);
   } catch (err) {
     console.error("Error running DB upgrades:", err);
   }

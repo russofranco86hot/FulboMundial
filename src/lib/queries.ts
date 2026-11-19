@@ -48,6 +48,7 @@ export const getCurrentMatch = cache(async (groupId?: number): Promise<Match | n
 export type SignupWithPlayer = {
   playerId: number;
   priorityOrder: number;
+  isHistorico?: boolean;
   signupAt: Date;
   manualOrder?: number | null;
   withdrawn: boolean;
@@ -55,6 +56,13 @@ export type SignupWithPlayer = {
   isGoalkeeper: boolean;
   stars: string;
   phone?: string | null;
+  preferredPosition?: string | null;
+  preferredFoot?: string | null;
+  recentAttendance?: number;
+  totalAttendance?: number;
+  standingsPts?: number;
+  standingsWon?: number;
+  standingsWinPct?: number;
 };
 
 /** Anotados vigentes (no dados de baja) de un partido, con datos del jugador. */
@@ -67,6 +75,7 @@ export async function getActiveSignups(matchId: number): Promise<SignupWithPlaye
       .select({
         playerId: signups.playerId,
         priorityOrder: players.priorityOrder,
+        isHistorico: players.isHistorico,
         signupAt: signups.signupAt,
         manualOrder: signups.manualOrder,
         withdrawn: signups.withdrawn,
@@ -74,6 +83,8 @@ export async function getActiveSignups(matchId: number): Promise<SignupWithPlaye
         isGoalkeeper: players.isGoalkeeper,
         stars: players.stars,
         phone: players.phone,
+        preferredPosition: players.preferredPosition,
+        preferredFoot: players.preferredFoot,
       })
       .from(signups)
       .innerJoin(players, eq(players.id, signups.playerId))
@@ -85,12 +96,15 @@ export async function getActiveSignups(matchId: number): Promise<SignupWithPlaye
       .select({
         playerId: signups.playerId,
         priorityOrder: players.priorityOrder,
+        isHistorico: players.isHistorico,
         signupAt: signups.signupAt,
         withdrawn: signups.withdrawn,
         name: players.name,
         isGoalkeeper: players.isGoalkeeper,
         stars: players.stars,
         phone: players.phone,
+        preferredPosition: players.preferredPosition,
+        preferredFoot: players.preferredFoot,
       })
       .from(signups)
       .innerJoin(players, eq(players.id, signups.playerId))
@@ -99,12 +113,86 @@ export async function getActiveSignups(matchId: number): Promise<SignupWithPlaye
   }
 }
 
-/** Lista provisional / final: titulares y suplentes por prioridad. */
+/** Lista provisional / final: titulares y suplentes según prioridad configurada del grupo y ajuste manual. */
 export async function getSelection(
   match: Match
 ): Promise<SelectionRow<SignupWithPlayer>[]> {
   const active = await getActiveSignups(match.id);
-  return computeSelection(active, match.capacity);
+  if (active.length === 0) return [];
+
+  const cutoffAt = new Date(new Date(match.matchDate).getTime() - 24 * 60 * 60 * 1000);
+  let criteriaOrder: string | null = null;
+  const recentCounts = new Map<number, number>();
+  const standingByPlayer = new Map<
+    number,
+    { pts: number; won: number; winPct: number; gp: number }
+  >();
+
+  if (match.groupId) {
+    const { groups } = await import("@/db/schema");
+    const [groupOrderRaw, standingsRows, recentMatchIds] = await Promise.all([
+      db
+        .select({ signupPriorityOrder: groups.signupPriorityOrder })
+        .from(groups)
+        .where(eq(groups.id, match.groupId))
+        .limit(1)
+        .then((r) => r[0]?.signupPriorityOrder ?? null)
+        .catch(() => null),
+      getStandings(match.groupId).catch(() => []),
+      db
+        .select({ id: matches.id })
+        .from(matches)
+        .where(and(eq(matches.groupId, match.groupId), eq(matches.status, "finished")))
+        .orderBy(desc(matches.matchDate))
+        .limit(5)
+        .catch(() => []),
+    ]);
+
+    criteriaOrder = groupOrderRaw;
+    for (const st of standingsRows) {
+      standingByPlayer.set(st.playerId, {
+        pts: st.pts,
+        won: st.won,
+        winPct: st.winPct,
+        gp: st.gp,
+      });
+    }
+
+    if (recentMatchIds.length > 0) {
+      const mIds = recentMatchIds.map((m) => m.id);
+      const recentTeamRows = await db
+        .select({ matchId: teams.matchId, playerId: teams.playerId })
+        .from(teams)
+        .where(and(inArray(teams.matchId, mIds), sql`${teams.playerId} IS NOT NULL`))
+        .catch(() => []);
+
+      const seenPerMatch = new Set<string>();
+      for (const r of recentTeamRows) {
+        if (!r.playerId) continue;
+        const key = `${r.matchId}-${r.playerId}`;
+        if (seenPerMatch.has(key)) continue;
+        seenPerMatch.add(key);
+        recentCounts.set(r.playerId, (recentCounts.get(r.playerId) ?? 0) + 1);
+      }
+    }
+  }
+
+  const enriched: SignupWithPlayer[] = active.map((s) => {
+    const st = standingByPlayer.get(s.playerId);
+    return {
+      ...s,
+      recentAttendance: recentCounts.get(s.playerId) ?? 0,
+      totalAttendance: st?.gp ?? 0,
+      standingsPts: st?.pts ?? 0,
+      standingsWon: st?.won ?? 0,
+      standingsWinPct: st?.winPct ?? 0,
+    };
+  });
+
+  return computeSelection(enriched, match.capacity, {
+    criteriaOrder,
+    cutoffAt,
+  });
 }
 
 /** ¿Está anotado (vigente) este jugador en el partido? */

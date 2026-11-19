@@ -129,12 +129,11 @@ export function nextGroupMatchDate(
   return artWallTimeToUtc(tp.year, tp.month, tp.day, targetHour, targetMinute);
 }
 
-/** Ventana de inscripción para un partido dado. */
+/** Ventana de inscripción para un partido dado (cierra 24 hs antes). */
 export function signupWindow(matchDate: Date | string): { opensAt: Date; closesAt: Date } {
   const d = toDate(matchDate);
-  const p = artParts(d);
-  // Cierra el mismo miércoles 12:00 ART
-  const closesAt = artWallTimeToUtc(p.year, p.month, p.day, 12, 0);
+  // Cierra exactamente 24 horas antes del inicio del partido
+  const closesAt = new Date(d.getTime() - 24 * 60 * 60 * 1000);
   // Abre el miércoles anterior 23:00 ART (matchDate − 7 días)
   const prev = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000);
   const pp = artParts(prev);

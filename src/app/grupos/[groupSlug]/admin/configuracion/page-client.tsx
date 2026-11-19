@@ -1,11 +1,17 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, Trophy, Calendar, Users, Bell, Flag } from "lucide-react";
+import { CheckCircle2, Trophy, Calendar, Users, Bell, Flag, ArrowUp, ArrowDown, ListOrdered, RotateCcw } from "lucide-react";
 import { adminGroupSaveSettings, adminGroupStartNewChampionship } from "../actions";
 import { ProCard } from "@/components/pro-card";
 import { useApiData, useRouteParams } from "@/lib/client-api";
+import {
+  DEFAULT_SIGNUP_PRIORITY_ORDER,
+  SIGNUP_CRITERIA_META,
+  parseSignupPriorityOrder,
+  type SignupCriterion,
+} from "@/lib/selection";
 
 type ConfigData = {
   allowed: boolean;
@@ -23,6 +29,7 @@ type ConfigData = {
     teamAName: string | null;
     teamBName: string | null;
     adminNotifyPreference?: string | null;
+    signupPriorityOrder?: string | null;
     championshipName?: string | null;
     championshipEndDate?: string | null;
     championshipSummary?: string | null;
@@ -39,11 +46,55 @@ function GroupAdminConfigContent() {
     groupSlug ? `/api/page-data/group/${encodeURIComponent(groupSlug)}/admin/configuracion` : null
   );
 
+  const [criteriaOrder, setCriteriaOrder] = useState<SignupCriterion[]>(
+    () => [...DEFAULT_SIGNUP_PRIORITY_ORDER]
+  );
+
+  useEffect(() => {
+    if (data?.group) {
+      setCriteriaOrder(parseSignupPriorityOrder(data.group.signupPriorityOrder));
+    }
+  }, [data?.group?.id, data?.group?.signupPriorityOrder]);
+
   if (!groupSlug || (loading && !data) || !data?.allowed || !data.group) {
     return <div className="pt-8 text-center text-sm text-zinc-500">Cargando configuración...</div>;
   }
 
   const { group, isPro = false } = data;
+  const disabledCriteria = DEFAULT_SIGNUP_PRIORITY_ORDER.filter(
+    (c) => !criteriaOrder.includes(c)
+  );
+
+  const moveCriterion = (idx: number, dir: -1 | 1) => {
+    const target = idx + dir;
+    if (target < 0 || target >= criteriaOrder.length) return;
+    setCriteriaOrder((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(idx, 1);
+      next.splice(target, 0, item);
+      return next;
+    });
+  };
+
+  const makeFirstCriterion = (idx: number) => {
+    if (idx <= 0) return;
+    setCriteriaOrder((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(idx, 1);
+      next.unshift(item);
+      return next;
+    });
+  };
+
+  const toggleCriterion = (c: SignupCriterion, enable: boolean) => {
+    setCriteriaOrder((prev) => {
+      if (enable) {
+        return prev.includes(c) ? prev : [...prev, c];
+      }
+      if (prev.length <= 1) return prev;
+      return prev.filter((item) => item !== c);
+    });
+  };
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -172,6 +223,121 @@ function GroupAdminConfigContent() {
                 className="input w-full"
               />
             </div>
+          </div>
+        </div>
+
+        <div className="card space-y-4 border-pitch-200/80 dark:border-zinc-800">
+          <div className="flex items-center justify-between gap-2 border-b border-pitch-100/60 dark:border-zinc-800 pb-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <ListOrdered size={20} className="text-emerald-600 dark:text-emerald-400" />
+              <h2 className="font-bold text-pitch-800 dark:text-zinc-100">
+                Orden de Prioridad de Jugadores (Cupo y Suplentes)
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCriteriaOrder([...DEFAULT_SIGNUP_PRIORITY_ORDER])}
+              className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 inline-flex items-center gap-1 transition-colors"
+            >
+              <RotateCcw size={12} /> Restablecer 1→2→3→4
+            </button>
+          </div>
+
+          <input type="hidden" name="signupPriorityOrder" value={criteriaOrder.join(",")} />
+
+          <p className="text-xs text-pitch-900/60 dark:text-zinc-400">
+            Cuando se anotan más jugadores que el cupo del partido, se evalúan en este orden (de arriba hacia abajo). Podés reordenar o alternar qué criterios usar y en cada partido seguís teniendo el ajuste manual si hace falta.
+          </p>
+
+          <div className="space-y-2">
+            {criteriaOrder.map((c, idx) => {
+              const meta = SIGNUP_CRITERIA_META[c];
+              return (
+                <div
+                  key={c}
+                  className="p-3 rounded-2xl bg-pitch-50/60 dark:bg-zinc-800/50 border border-pitch-200/70 dark:border-zinc-700 flex items-start justify-between gap-3"
+                >
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span className="w-6 h-6 rounded-full bg-pitch-600 text-white text-xs font-black flex items-center justify-center shrink-0 mt-0.5">
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs sm:text-sm font-bold text-pitch-900 dark:text-zinc-100">
+                        {meta.title}
+                      </p>
+                      <p className="text-[11px] text-pitch-900/60 dark:text-zinc-400 leading-snug">
+                        {meta.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => moveCriterion(idx, -1)}
+                      disabled={idx === 0}
+                      className="p-1.5 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 disabled:opacity-30 hover:bg-zinc-50"
+                      title="Subir prioridad"
+                    >
+                      <ArrowUp size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveCriterion(idx, 1)}
+                      disabled={idx === criteriaOrder.length - 1}
+                      className="p-1.5 rounded-lg bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 disabled:opacity-30 hover:bg-zinc-50"
+                      title="Bajar prioridad"
+                    >
+                      <ArrowDown size={13} />
+                    </button>
+                    {idx > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => makeFirstCriterion(idx)}
+                        className="text-[10px] font-extrabold px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30"
+                        title="Poner como 1° criterio principal"
+                      >
+                        1°
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleCriterion(c, false)}
+                      disabled={criteriaOrder.length <= 1}
+                      className="text-[10px] font-bold px-2 py-1 rounded-lg bg-zinc-200/70 hover:bg-red-100 text-zinc-700 hover:text-red-700 dark:bg-zinc-700 dark:text-zinc-300 disabled:opacity-30"
+                      title="Desactivar este criterio"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {disabledCriteria.length > 0 && (
+            <div className="pt-2 border-t border-dashed border-zinc-200 dark:border-zinc-700 space-y-2">
+              <p className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
+                Criterios desactivados (podés volver a activarlos):
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {disabledCriteria.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => toggleCriterion(c, true)}
+                    className="text-xs font-bold px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-pitch-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700"
+                  >
+                    + {SIGNUP_CRITERIA_META[c].title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl text-[11px] text-zinc-500 dark:text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60 space-y-1">
+            <p>⏱️ <strong>Cierre 24 hs antes:</strong> los jugadores anotados hasta 24 hs antes del partido tienen prioridad sobre quienes se anoten luego del cierre.</p>
+            <p>✋ <strong>Ajuste manual:</strong> en la pestaña <em>Partido</em> podés subir, bajar o pasar de titular a suplente manualmente en cualquier momento.</p>
           </div>
         </div>
 
