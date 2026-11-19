@@ -7,7 +7,7 @@ import { getCurrentMatch, getSelection } from "@/lib/queries";
 import { handlePostCloseWithdrawal } from "@/lib/match-actions";
 import { pushToPlayer } from "@/lib/push";
 
-type ActionResult = { ok: boolean; error?: string };
+type ActionResult = { ok: boolean; removed?: boolean; error?: string };
 
 /**
  * Auto-vinculación: en el primer login el usuario elige su nombre de la lista.
@@ -248,6 +248,32 @@ export async function voteMatchAwardAction(
   if (!player) return { ok: false, error: "No estás vinculado" };
 
   const { matchVotes } = await import("@/db/schema");
+  const [existing] = await db
+    .select()
+    .from(matchVotes)
+    .where(
+      and(
+        eq(matchVotes.matchId, matchId),
+        eq(matchVotes.voterId, player.id),
+        eq(matchVotes.categoryId, categoryId)
+      )
+    )
+    .limit(1);
+
+  const revalidateVotePath = () => {
+    if (groupSlug) {
+      revalidatePath(`/grupos/${groupSlug}/historial/${matchId}`);
+    } else {
+      revalidatePath(`/historial/${matchId}`);
+    }
+  };
+
+  if (existing && existing.candidateId === candidateId) {
+    await db.delete(matchVotes).where(eq(matchVotes.id, existing.id));
+    revalidateVotePath();
+    return { ok: true, removed: true };
+  }
+
   await db
     .insert(matchVotes)
     .values({
@@ -292,10 +318,6 @@ export async function voteMatchAwardAction(
     }
   }
 
-  if (groupSlug) {
-    revalidatePath(`/grupos/${groupSlug}/historial/${matchId}`);
-  } else {
-    revalidatePath(`/historial/${matchId}`);
-  }
-  return { ok: true };
+  revalidateVotePath();
+  return { ok: true, removed: false };
 }

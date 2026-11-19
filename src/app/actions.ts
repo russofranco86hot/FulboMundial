@@ -1,7 +1,7 @@
 "use client";
 
 import { callRpc } from "@/lib/client-api";
-type ActionResult = { ok: boolean; error?: string };
+type ActionResult = { ok: boolean; removed?: boolean; error?: string };
 
 export async function claimPlayer(playerId: number) : Promise<ActionResult> {
   try {

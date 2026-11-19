@@ -188,9 +188,14 @@ export function MatchDetailClient({
     const candidateName = players.find((p) => p.playerId === candidateId)?.name;
     startTransition(async () => {
       const res = await voteMatchAwardAction(matchId, categoryId, candidateId, groupSlug);
-      if (res.ok && candidateName) {
-        setFeedbackMsg(`Voto registrado para ${candidateName} (notificación push enviada).`);
-        setTimeout(() => setFeedbackMsg(null), 3500);
+      if (res.ok) {
+        if (res.removed) {
+          setFeedbackMsg(`Se quitó tu voto a ${candidateName || "ese jugador"}.`);
+          setTimeout(() => setFeedbackMsg(null), 3500);
+        } else if (candidateName) {
+          setFeedbackMsg(`Voto registrado para ${candidateName} (notificación push enviada).`);
+          setTimeout(() => setFeedbackMsg(null), 3500);
+        }
       }
     });
   };
@@ -240,9 +245,11 @@ export function MatchDetailClient({
             const voteCount = counts[p.playerId] || 0;
             return (
               <button
+                type="button"
                 key={p.playerId}
                 onClick={() => handleVote(category, p.playerId)}
                 disabled={isPending || !currentUserId}
+                title={isMyVote ? "Tocá de nuevo para quitar tu voto" : "Votar"}
                 className={`text-left p-3 rounded-xl border text-sm transition-all duration-300 flex justify-between items-center relative overflow-hidden ${
                   isMyVote
                     ? `${styles.bg} ${styles.border} ${styles.text} animate-scale-in shadow-md`
