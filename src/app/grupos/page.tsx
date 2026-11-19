@@ -14,6 +14,7 @@ type GroupItem = {
   format: string;
   defaultDayOfWeek: number | null;
   defaultTime: string | null;
+  championshipName?: string | null;
   role: "admin" | "member";
   proActive: boolean;
 };
@@ -209,10 +210,15 @@ function GroupCard({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className="chip bg-pitch-100 text-pitch-700 dark:bg-zinc-800 dark:text-zinc-300 text-xs">
               {group.format}
             </span>
+            {group.championshipName && (
+              <span className="chip bg-amber-100/90 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 text-[11px] font-bold">
+                🏆 {group.championshipName}
+              </span>
+            )}
             {group.defaultTime && (
               <span className="text-xs text-pitch-900/50 dark:text-zinc-500">
                 {group.defaultDayOfWeek !== null &&

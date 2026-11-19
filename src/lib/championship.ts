@@ -1,14 +1,49 @@
-import { and, asc, desc, eq } from "drizzle-orm";
-import { db, groups, matches, matchNotes, matchVotes, players, results } from "@/db";
+import { and, asc, desc, eq, gte } from "drizzle-orm";
+import {
+  db,
+  groupPlayerComments,
+  groups,
+  matches,
+  matchNotes,
+  matchVotes,
+  players,
+  results,
+} from "@/db";
 import { ensureAdminNotifyPreferenceColumn } from "./db-migrations";
 import { getGroupTopScorers } from "./goals";
 import { getStandings } from "./queries";
 import { artWallTimeToUtc, ART_TZ, formatArt } from "./time";
 import { toZonedTime } from "date-fns-tz";
 
+export type ArchivedChampionship = {
+  id: string;
+  name: string;
+  firstMatchFormatted: string | null;
+  endDateFormatted: string | null;
+  playedMatchesCount: number;
+  closedAt: string;
+  summary: string;
+  standings: {
+    playerId: number;
+    name: string;
+    pts: number;
+    gp: number;
+    won: number;
+    drawn: number;
+    lost: number;
+  }[];
+  topScorers: {
+    playerId: number;
+    name: string;
+    totalGoals: number;
+    totalAssists: number;
+  }[];
+};
+
 export type ChampionshipInfo = {
-  endDate: string;
-  endDateFormatted: string;
+  name: string | null;
+  endDate: string | null;
+  endDateFormatted: string | null;
   firstMatchDate: Date | string | null;
   firstMatchFormatted: string | null;
   playedMatchesCount: number;
@@ -16,6 +51,7 @@ export type ChampionshipInfo = {
   isFinishedChampionship: boolean;
   isLastMatchActive: boolean;
   summary: string | null;
+  history: ArchivedChampionship[];
 };
 
 function parseYmd(ymd: string): { year: number; month: number; day: number } | null {
@@ -42,6 +78,11 @@ function capitalizeWords(s: string): string {
     if (offset > 0 && word === "de") return match.toLowerCase();
     return ch.toUpperCase();
   });
+}
+
+function parseHistory(raw: unknown): ArchivedChampionship[] {
+  if (!Array.isArray(raw)) return [];
+  return raw as ArchivedChampionship[];
 }
 
 /** Formatea "2026-12-30" como "Miércoles 30 de Diciembre". */
@@ -75,16 +116,25 @@ export function isLastChampionshipMatch(
 export async function getChampionshipInfo(
   groupId: number,
   group: {
+    championshipName?: string | null;
     championshipEndDate?: string | null;
+    championshipStartedAt?: Date | string | null;
     championshipSummary?: string | null;
+    championshipHistory?: unknown;
     defaultDayOfWeek?: number | null;
     defaultTime?: string | null;
   }
 ): Promise<ChampionshipInfo | null> {
-  if (!group.championshipEndDate) return null;
-  const endDate = group.championshipEndDate;
-  const endParsed = parseYmd(endDate);
-  if (!endParsed) return null;
+  const name = group.championshipName?.trim() || null;
+  const endDate = group.championshipEndDate?.trim() || null;
+  const endParsed = endDate ? parseYmd(endDate) : null;
+  const history = parseHistory(group.championshipHistory);
+
+  if (!name && !endParsed && history.length === 0) return null;
+
+  const startedAtDate = group.championshipStartedAt
+    ? new Date(group.championshipStartedAt)
+    : null;
 
   const rows = await db
     .select({
@@ -92,21 +142,46 @@ export async function getChampionshipInfo(
       matchDate: matches.matchDate,
       status: matches.status,
       resultId: results.id,
+      resultCreatedAt: results.createdAt,
     })
     .from(matches)
     .leftJoin(results, eq(matches.id, results.matchId))
     .where(eq(matches.groupId, groupId))
     .orderBy(asc(matches.matchDate));
 
-  const finishedWithResult = rows.filter(
-    (r) =>
-      r.status === "finished" &&
-      r.resultId !== null &&
-      formatArt(r.matchDate, "yyyy-MM-dd") <= endDate
-  );
+  const finishedWithResult = rows.filter((r) => {
+    if (r.status !== "finished" || r.resultId === null) return false;
+    if (startedAtDate && r.resultCreatedAt && new Date(r.resultCreatedAt) < startedAtDate) {
+      return false;
+    }
+    if (endDate && formatArt(r.matchDate, "yyyy-MM-dd") > endDate) {
+      return false;
+    }
+    return true;
+  });
 
   const firstFinished = finishedWithResult[0] ?? null;
   const playedMatchesCount = finishedWithResult.length;
+  const activeMatches = rows.filter((r) => r.status !== "finished");
+
+  if (!endDate || !endParsed) {
+    return {
+      name,
+      endDate: null,
+      endDateFormatted: null,
+      firstMatchDate: firstFinished?.matchDate ?? null,
+      firstMatchFormatted: firstFinished
+        ? capitalizeWords(formatArt(firstFinished.matchDate, "EEEE d 'de' MMMM 'de' yyyy"))
+        : null,
+      playedMatchesCount,
+      remainingMatchesCount: activeMatches.length,
+      isFinishedChampionship: false,
+      isLastMatchActive: false,
+      summary: group.championshipSummary ?? null,
+      history,
+    };
+  }
+
   const finishedDates = new Set(
     finishedWithResult.map((r) => formatArt(r.matchDate, "yyyy-MM-dd"))
   );
@@ -153,7 +228,6 @@ export async function getChampionshipInfo(
     safety++;
   }
 
-  // Contar también partidos ya creados (open/closed) cuya fecha sea <= endDate aunque caigan otro día
   for (const r of rows) {
     if (r.status !== "finished") {
       const mYmd = formatArt(r.matchDate, "yyyy-MM-dd");
@@ -164,7 +238,6 @@ export async function getChampionshipInfo(
   }
 
   const remainingMatchesCount = countedDates.size;
-  const activeMatches = rows.filter((r) => r.status !== "finished");
   const isLastMatchActive = activeMatches.some((m) =>
     isLastChampionshipMatch(m.matchDate, endDate, group.defaultDayOfWeek)
   );
@@ -174,6 +247,7 @@ export async function getChampionshipInfo(
     playedMatchesCount > 0;
 
   return {
+    name,
     endDate,
     endDateFormatted: formatChampionshipDate(endDate),
     firstMatchDate: firstFinished?.matchDate ?? null,
@@ -185,6 +259,7 @@ export async function getChampionshipInfo(
     isFinishedChampionship,
     isLastMatchActive,
     summary: group.championshipSummary ?? null,
+    history,
   };
 }
 
@@ -215,49 +290,68 @@ function pickVoteWinner(
  * las notas guardadas, la tabla de posiciones, goleadores y las votaciones.
  */
 export async function generateChampionshipSummary(groupId: number): Promise<string> {
-  const [groupRows, standings, topScorers, matchResults, notesRows, voteRows] =
-    await Promise.all([
-      db.select().from(groups).where(eq(groups.id, groupId)).limit(1),
-      getStandings(groupId),
-      getGroupTopScorers(groupId, 5),
-      db
-        .select({
-          matchId: matches.id,
-          matchDate: matches.matchDate,
-          scoreA: results.scoreA,
-          scoreB: results.scoreB,
-          notes: results.notes,
-        })
-        .from(matches)
-        .innerJoin(results, eq(matches.id, results.matchId))
-        .where(and(eq(matches.groupId, groupId), eq(matches.status, "finished")))
-        .orderBy(asc(matches.matchDate)),
-      db
-        .select({
-          matchDate: matches.matchDate,
-          note: matchNotes.note,
-          authorName: players.name,
-        })
-        .from(matchNotes)
-        .innerJoin(matches, eq(matches.id, matchNotes.matchId))
-        .innerJoin(players, eq(players.id, matchNotes.playerId))
-        .where(eq(matches.groupId, groupId))
-        .orderBy(desc(matchNotes.createdAt))
-        .limit(30),
-      db
-        .select({
-          categoryId: matchVotes.categoryId,
-          candidateId: matchVotes.candidateId,
-          candidateName: players.name,
-        })
-        .from(matchVotes)
-        .innerJoin(matches, eq(matches.id, matchVotes.matchId))
-        .innerJoin(players, eq(players.id, matchVotes.candidateId))
-        .where(eq(matches.groupId, groupId)),
-    ]);
+  const group = (await db.select().from(groups).where(eq(groups.id, groupId)).limit(1))[0];
+  const startedAt = group?.championshipStartedAt ? new Date(group.championshipStartedAt) : null;
 
-  const group = groupRows[0];
-  const groupName = group?.name || "el campeonato";
+  const [standings, topScorers, matchResults, notesRows, voteRows] = await Promise.all([
+    getStandings(groupId),
+    getGroupTopScorers(groupId, 5),
+    db
+      .select({
+        matchId: matches.id,
+        matchDate: matches.matchDate,
+        scoreA: results.scoreA,
+        scoreB: results.scoreB,
+        notes: results.notes,
+      })
+      .from(matches)
+      .innerJoin(results, eq(matches.id, results.matchId))
+      .where(
+        startedAt
+          ? and(
+              eq(matches.groupId, groupId),
+              eq(matches.status, "finished"),
+              gte(results.createdAt, startedAt)
+            )
+          : and(eq(matches.groupId, groupId), eq(matches.status, "finished"))
+      )
+      .orderBy(asc(matches.matchDate)),
+    db
+      .select({
+        matchDate: matches.matchDate,
+        note: matchNotes.note,
+        authorName: players.name,
+      })
+      .from(matchNotes)
+      .innerJoin(matches, eq(matches.id, matchNotes.matchId))
+      .innerJoin(players, eq(players.id, matchNotes.playerId))
+      .where(
+        startedAt
+          ? and(eq(matches.groupId, groupId), gte(matchNotes.createdAt, startedAt))
+          : eq(matches.groupId, groupId)
+      )
+      .orderBy(desc(matchNotes.createdAt))
+      .limit(30),
+    db
+      .select({
+        categoryId: matchVotes.categoryId,
+        candidateId: matchVotes.candidateId,
+        candidateName: players.name,
+      })
+      .from(matchVotes)
+      .innerJoin(matches, eq(matches.id, matchVotes.matchId))
+      .innerJoin(players, eq(players.id, matchVotes.candidateId))
+      .where(
+        startedAt
+          ? and(eq(matches.groupId, groupId), gte(matchVotes.createdAt, startedAt))
+          : eq(matches.groupId, groupId)
+      ),
+  ]);
+
+  const groupName = group?.name || "el grupo";
+  const tournamentTitle = group?.championshipName?.trim()
+    ? `${group.championshipName.trim()} (${groupName})`
+    : `campeonato de ${groupName}`;
   const endDateLabel = group?.championshipEndDate
     ? formatChampionshipDate(group.championshipEndDate)
     : "Cierre de temporada";
@@ -297,7 +391,7 @@ export async function generateChampionshipSummary(groupId: number): Promise<stri
 
   if (apiKey) {
     try {
-      const prompt = `Sos un relator y cronista de fútbol argentino apasionado. Escribí un RESUMEN BREVE (2 párrafos cortos y dinámicos + un cierre de premios) del campeonato del grupo "${groupName}".
+      const prompt = `Sos un relator y cronista de fútbol argentino apasionado. Escribí un RESUMEN BREVE (2 párrafos cortos y dinámicos + un cierre de premios) del torneo "${tournamentTitle}".
 
 DATOS DEL TORNEO:
 - Primer partido: ${firstMatchLabel} | Fecha de cierre: ${endDateLabel} | Partidos jugados: ${filteredMatches.length}
@@ -339,7 +433,7 @@ Reglas:
   if (!summary) {
     const parts: string[] = [];
     parts.push(
-      `🏆 Se bajó el telón del campeonato de ${groupName} (${firstMatchLabel} → ${endDateLabel}) tras ${filteredMatches.length} ${filteredMatches.length === 1 ? "fecha disputada" : "fechas disputadas"}.`
+      `🏆 Se bajó el telón de ${tournamentTitle} (${firstMatchLabel} → ${endDateLabel}) tras ${filteredMatches.length} ${filteredMatches.length === 1 ? "fecha disputada" : "fechas disputadas"}.`
     );
 
     if (champion) {
@@ -390,4 +484,86 @@ Reglas:
   }
 
   return summary;
+}
+
+/**
+ * Cierra manualmente el campeonato en curso: genera la reseña final, guarda
+ * un snapshot estático en `groups.championshipHistory` y reinicia el torneo
+ * con un nuevo nombre dejando tabla histórica y estadísticas en blanco.
+ */
+export async function closeAndStartNewChampionship(opts: {
+  groupId: number;
+  newChampionshipName: string;
+  newChampionshipEndDate?: string | null;
+}): Promise<ArchivedChampionship> {
+  const group = (
+    await db.select().from(groups).where(eq(groups.id, opts.groupId)).limit(1)
+  )[0];
+  if (!group) {
+    throw new Error("Grupo no encontrado.");
+  }
+
+  const [standings, topScorers, info, summary] = await Promise.all([
+    getStandings(opts.groupId),
+    getGroupTopScorers(opts.groupId, 10),
+    getChampionshipInfo(opts.groupId, group),
+    generateChampionshipSummary(opts.groupId),
+  ]);
+
+  const archived: ArchivedChampionship = {
+    id: `champ-${Date.now()}`,
+    name: group.championshipName?.trim() || "Campeonato",
+    firstMatchFormatted: info?.firstMatchFormatted ?? null,
+    endDateFormatted:
+      info?.endDateFormatted ??
+      (group.championshipEndDate ? formatChampionshipDate(group.championshipEndDate) : null),
+    playedMatchesCount: info?.playedMatchesCount ?? 0,
+    closedAt: new Date().toISOString(),
+    summary,
+    standings: standings.map((s) => ({
+      playerId: s.playerId,
+      name: s.name,
+      pts: s.pts,
+      gp: s.gp,
+      won: s.won,
+      drawn: s.drawn,
+      lost: s.lost,
+    })),
+    topScorers: topScorers.map((t) => ({
+      playerId: t.playerId,
+      name: t.name,
+      totalGoals: t.totalGoals,
+      totalAssists: t.totalAssists,
+    })),
+  };
+
+  const prevHistory = parseHistory(group.championshipHistory);
+  const updatedHistory = [archived, ...prevHistory];
+
+  // Limpiar comentarios ("Tu momento...") generados para el torneo que termina
+  try {
+    await db
+      .delete(groupPlayerComments)
+      .where(eq(groupPlayerComments.groupId, opts.groupId));
+  } catch (err) {
+    console.warn("[championship] Error clearing old player comments:", err);
+  }
+
+  const updateValues = {
+    championshipName: opts.newChampionshipName.trim(),
+    championshipEndDate: opts.newChampionshipEndDate?.trim() || null,
+    championshipSummary: null,
+    championshipStartedAt: new Date(),
+    championshipHistory: updatedHistory,
+  };
+
+  try {
+    await db.update(groups).set(updateValues).where(eq(groups.id, opts.groupId));
+  } catch (err) {
+    console.warn("[championship] Retrying archive/restart after schema ensure:", err);
+    await ensureAdminNotifyPreferenceColumn(true);
+    await db.update(groups).set(updateValues).where(eq(groups.id, opts.groupId));
+  }
+
+  return archived;
 }

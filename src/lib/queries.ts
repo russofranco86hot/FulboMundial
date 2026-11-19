@@ -1,6 +1,6 @@
 import { requestCache as cache } from "./request-context";
 import { db, matches, signups, players, teams, results, matchVotes, type Match, type Player } from "@/db";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { computeSelection, type SelectionRow } from "./selection";
 
 /** Filas crudas necesarias para resolver una query .execute() en neon-http. */
@@ -151,26 +151,32 @@ export const getStandings = cache(async (groupId?: number): Promise<StandingRow[
     if (g) targetGroupId = g.id;
   }
 
+  const { groups } = await import("@/db/schema");
+  const grpRow = targetGroupId
+    ? await db
+        .select({
+          ptsWin: groups.ptsWin,
+          ptsDraw: groups.ptsDraw,
+          ptsLoss: groups.ptsLoss,
+          championshipStartedAt: groups.championshipStartedAt,
+        })
+        .from(groups)
+        .where(eq(groups.id, targetGroupId))
+        .limit(1)
+        .then((r) => r[0] ?? null)
+    : null;
+
+  const startedAt = grpRow?.championshipStartedAt ?? null;
+  const startedAtIso = startedAt ? new Date(startedAt).toISOString() : null;
+
   const whereFinished = targetGroupId
-    ? and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"))
+    ? startedAt
+      ? and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"), gte(results.createdAt, startedAt))
+      : and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"))
     : eq(matches.status, "finished");
 
-  const { groups } = await import("@/db/schema");
-
-  // Ejecutar consultas en paralelo y filtrando equipos únicamente por partidos del grupo
-  const [grpRow, res, allMatches, allTeams] = await Promise.all([
-    targetGroupId
-      ? db
-          .select({
-            ptsWin: groups.ptsWin,
-            ptsDraw: groups.ptsDraw,
-            ptsLoss: groups.ptsLoss,
-          })
-          .from(groups)
-          .where(eq(groups.id, targetGroupId))
-          .limit(1)
-          .then((r) => r[0] ?? null)
-      : Promise.resolve(null),
+  // Ejecutar consultas filtrando únicamente por partidos del grupo y torneo vigente
+  const [res, allMatches] = await Promise.all([
     db.execute(sql`
       WITH wld AS (
         SELECT
@@ -183,22 +189,35 @@ export const getStandings = cache(async (groupId?: number): Promise<StandingRow[
         JOIN ${results} r ON r.match_id = t.match_id
         JOIN ${matches} m ON m.id = t.match_id
         WHERE t.player_id IS NOT NULL
+          AND m.status = 'finished'
           AND (${targetGroupId}::int IS NULL OR m.group_id = ${targetGroupId})
+          AND (${startedAtIso}::timestamptz IS NULL OR r.created_at >= ${startedAtIso}::timestamptz)
         GROUP BY t.player_id
       ),
       drops AS (
         SELECT s.player_id, COUNT(*) AS dropouts
         FROM ${signups} s
         JOIN ${matches} m ON m.id = s.match_id
-        WHERE s.withdrawn = true AND (${targetGroupId}::int IS NULL OR m.group_id = ${targetGroupId})
+        WHERE s.withdrawn = true
+          AND (${targetGroupId}::int IS NULL OR m.group_id = ${targetGroupId})
+          AND (${startedAtIso}::timestamptz IS NULL OR s.signup_at >= ${startedAtIso}::timestamptz)
         GROUP BY s.player_id
       )
       SELECT
         p.id AS player_id,
         p.name AS name,
-        GREATEST(COALESCE(w.won, 0) + p.adj_won, 0) AS won,
-        GREATEST(COALESCE(w.drawn, 0) + p.adj_drawn, 0) AS drawn,
-        GREATEST(COALESCE(w.lost, 0) + p.adj_lost, 0) AS lost,
+        CASE WHEN ${startedAtIso}::timestamptz IS NULL
+          THEN GREATEST(COALESCE(w.won, 0) + p.adj_won, 0)
+          ELSE COALESCE(w.won, 0)
+        END AS won,
+        CASE WHEN ${startedAtIso}::timestamptz IS NULL
+          THEN GREATEST(COALESCE(w.drawn, 0) + p.adj_drawn, 0)
+          ELSE COALESCE(w.drawn, 0)
+        END AS drawn,
+        CASE WHEN ${startedAtIso}::timestamptz IS NULL
+          THEN GREATEST(COALESCE(w.lost, 0) + p.adj_lost, 0)
+          ELSE COALESCE(w.lost, 0)
+        END AS lost,
         COALESCE(d.dropouts, 0) AS dropouts,
         p.adj_won,
         p.adj_drawn,
@@ -209,7 +228,7 @@ export const getStandings = cache(async (groupId?: number): Promise<StandingRow[
       LEFT JOIN drops d ON d.player_id = p.id
       WHERE p.is_guest = false
         AND (${targetGroupId}::int IS NULL OR gm.player_id IS NOT NULL)
-      ORDER BY (COALESCE(w.won, 0) + p.adj_won) DESC, p.name ASC
+      ORDER BY won DESC, p.name ASC
     `),
     db
       .select({
@@ -221,12 +240,19 @@ export const getStandings = cache(async (groupId?: number): Promise<StandingRow[
       .innerJoin(results, eq(matches.id, results.matchId))
       .where(whereFinished)
       .orderBy(desc(matches.matchDate)),
-    db
-      .select({ matchId: teams.matchId, playerId: teams.playerId, team: teams.team })
-      .from(teams)
-      .innerJoin(matches, eq(matches.id, teams.matchId))
-      .where(and(sql`${teams.playerId} IS NOT NULL`, whereFinished)),
   ]);
+
+  if (startedAt && allMatches.length === 0) {
+    return [];
+  }
+
+  const allTeams =
+    allMatches.length > 0
+      ? await db
+          .select({ matchId: teams.matchId, playerId: teams.playerId, team: teams.team })
+          .from(teams)
+          .where(and(sql`${teams.playerId} IS NOT NULL`, inArray(teams.matchId, allMatches.map((m) => m.id))))
+      : [];
 
   const ptsWin = grpRow?.ptsWin ?? 3;
   const ptsDraw = grpRow?.ptsDraw ?? 2;
@@ -412,16 +438,27 @@ export async function getUnclaimedGroupPlayers(groupId: number) {
 }
 
 export async function getRecentMatches(groupId?: number, limitN = 5) {
+  const { groups } = await import("@/db/schema");
   let targetGroupId = groupId;
   if (!targetGroupId) {
-    const { groups } = await import("@/db/schema");
     const g = (await db.select({ id: groups.id }).from(groups).where(eq(groups.slug, "futbol-miercoles")).limit(1))[0]
       || (await db.select({ id: groups.id }).from(groups).limit(1))[0];
     if (g) targetGroupId = g.id;
   }
 
+  const startedAt = targetGroupId
+    ? await db
+        .select({ championshipStartedAt: groups.championshipStartedAt })
+        .from(groups)
+        .where(eq(groups.id, targetGroupId))
+        .limit(1)
+        .then((r) => r[0]?.championshipStartedAt ?? null)
+    : null;
+
   const whereFinished = targetGroupId
-    ? and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"))
+    ? startedAt
+      ? and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"), gte(results.createdAt, startedAt))
+      : and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"))
     : eq(matches.status, "finished");
 
   const recent = await db
@@ -608,16 +645,27 @@ export async function getMatchVotes(matchId: number) {
 }
 
 export async function getLastFinishedMatch(groupId?: number) {
+  const { groups } = await import("@/db/schema");
   let targetGroupId = groupId;
   if (!targetGroupId) {
-    const { groups } = await import("@/db/schema");
     const g = (await db.select({ id: groups.id }).from(groups).where(eq(groups.slug, "futbol-miercoles")).limit(1))[0]
       || (await db.select({ id: groups.id }).from(groups).limit(1))[0];
     if (g) targetGroupId = g.id;
   }
 
+  const startedAt = targetGroupId
+    ? await db
+        .select({ championshipStartedAt: groups.championshipStartedAt })
+        .from(groups)
+        .where(eq(groups.id, targetGroupId))
+        .limit(1)
+        .then((r) => r[0]?.championshipStartedAt ?? null)
+    : null;
+
   const whereFinished = targetGroupId
-    ? and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"))
+    ? startedAt
+      ? and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"), gte(results.createdAt, startedAt))
+      : and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"))
     : eq(matches.status, "finished");
 
   const last = await db

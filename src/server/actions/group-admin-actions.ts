@@ -19,6 +19,7 @@ import { saveMatchGoals } from "@/lib/goals";
 import { adminResetPlayerPassword } from "@/lib/auth-credentials";
 import { ensureAdminNotifyPreferenceColumn } from "@/lib/db-migrations";
 import {
+  closeAndStartNewChampionship,
   generateChampionshipSummary,
   isLastChampionshipMatch,
 } from "@/lib/championship";
@@ -748,6 +749,8 @@ export async function adminGroupSaveSettings(formData: FormData) {
   const teamAName = String(formData.get("teamAName") || "Claro").trim();
   const teamBName = String(formData.get("teamBName") || "Oscuro").trim();
   const adminNotifyPreference = String(formData.get("adminNotifyPreference") || "both").trim();
+  const rawChampionshipName = String(formData.get("championshipName") || "").trim();
+  const championshipName = rawChampionshipName || null;
   const rawChampionshipEndDate = String(formData.get("championshipEndDate") || "").trim();
   const championshipEndDate = rawChampionshipEndDate || null;
 
@@ -763,6 +766,7 @@ export async function adminGroupSaveSettings(formData: FormData) {
     teamAName,
     teamBName,
     adminNotifyPreference,
+    championshipName,
     championshipEndDate,
   };
 
@@ -1089,5 +1093,37 @@ export async function adminGroupGenerateChampionshipSummary(formData: FormData) 
 
   await generateChampionshipSummary(groupId);
   refreshGroup(groupSlug);
+}
+
+export async function adminGroupStartNewChampionship(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+  if (!groupId) return;
+
+  const rawNewName = String(formData.get("newChampionshipName") || "").trim();
+  const newChampionshipName = rawNewName || "Nuevo Campeonato";
+  const rawNewEndDate = String(formData.get("newChampionshipEndDate") || "").trim();
+  const newChampionshipEndDate = rawNewEndDate || null;
+
+  await closeAndStartNewChampionship({
+    groupId,
+    newChampionshipName,
+    newChampionshipEndDate,
+  });
+
+  try {
+    await pushToGroupMembers(groupId, {
+      title: `🏆 ¡Comienza ${newChampionshipName}!`,
+      body: "Se cerró el campeonato anterior (quedó guardado con su tabla final y reseña en el Historial). ¡Todos arrancan de cero!",
+      url: `/grupos/${groupSlug}/historial`,
+      tag: `new-championship-${groupId}-${Date.now()}`,
+    });
+  } catch (err) {
+    console.warn("[adminGroupStartNewChampionship] Error enviando push:", err);
+  }
+
+  refreshGroup(groupSlug);
+  redirect(`/grupos/${groupSlug}/historial?newChampionship=1`);
 }
 

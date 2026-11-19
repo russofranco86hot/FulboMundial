@@ -13,7 +13,7 @@ type LayoutData =
   | { access: "pending" | "denied"; group: { id: number; name: string; slug: string } }
   | {
       access: "granted";
-      group: { id: number; name: string; slug: string; format: string };
+      group: { id: number; name: string; slug: string; format: string; championshipName?: string | null };
       role: "admin" | "member" | null;
       isSuperAdmin: boolean;
       isReadOnlySuperAdmin: boolean;

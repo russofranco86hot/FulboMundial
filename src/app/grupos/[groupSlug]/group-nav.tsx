@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Home, Users, Trophy, TrendingUp, Settings, ChevronLeft } from "lucide-react";
 
 interface GroupNavProps {
-  group: { name: string; slug: string; format: string };
+  group: { name: string; slug: string; format: string; championshipName?: string | null };
   role: "admin" | "member";
   isSuperAdmin?: boolean;
 }
@@ -39,7 +39,14 @@ export default function GroupNav({ group, role, isSuperAdmin }: GroupNavProps) {
         </Link>
         <div className="flex-1 min-w-0">
           <h2 className="font-bold text-pitch-700 dark:text-zinc-100 truncate text-sm">{group.name}</h2>
-          <span className="text-xs text-pitch-900/50 dark:text-zinc-500">{group.format}</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-pitch-900/50 dark:text-zinc-500">{group.format}</span>
+            {group.championshipName && (
+              <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100/70 dark:bg-amber-950/50 px-2 py-0.5 rounded-full truncate max-w-[200px]">
+                🏆 {group.championshipName}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

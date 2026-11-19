@@ -16,8 +16,11 @@ export async function ensureAdminNotifyPreferenceColumn(force = false): Promise<
     await db.execute(sql`
       ALTER TABLE groups 
         ADD COLUMN IF NOT EXISTS admin_notify_preference TEXT NOT NULL DEFAULT 'both',
+        ADD COLUMN IF NOT EXISTS championship_name TEXT,
         ADD COLUMN IF NOT EXISTS championship_end_date TEXT,
+        ADD COLUMN IF NOT EXISTS championship_started_at TIMESTAMPTZ,
         ADD COLUMN IF NOT EXISTS championship_summary TEXT,
+        ADD COLUMN IF NOT EXISTS championship_history JSONB,
         ADD COLUMN IF NOT EXISTS pts_win INTEGER NOT NULL DEFAULT 3,
         ADD COLUMN IF NOT EXISTS pts_draw INTEGER NOT NULL DEFAULT 2,
         ADD COLUMN IF NOT EXISTS pts_loss INTEGER NOT NULL DEFAULT 1,
@@ -97,8 +100,11 @@ async function runMigrationsOnce(): Promise<void> {
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS team_a_name TEXT;`);
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS team_b_name TEXT;`);
     await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS admin_notify_preference TEXT NOT NULL DEFAULT 'both';`);
+    await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS championship_name TEXT;`);
     await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS championship_end_date TEXT;`);
+    await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS championship_started_at TIMESTAMPTZ;`);
     await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS championship_summary TEXT;`);
+    await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS championship_history JSONB;`);
   } catch (err) {
     console.error("Error running DB upgrades:", err);
   }

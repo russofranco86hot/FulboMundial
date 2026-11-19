@@ -152,6 +152,7 @@ pageDataApp.get("/grupos", async (c) => {
 
   const enrichedGroups = playerGroups.map((g) => ({
     ...g,
+    championshipName: g.championshipName ?? null,
     proActive: isGroupPro(g),
   }));
 

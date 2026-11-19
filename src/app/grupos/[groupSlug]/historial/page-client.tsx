@@ -1,18 +1,47 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { Trophy, Flag, Sparkles } from "lucide-react";
+import { Trophy, Flag, Sparkles, Archive, CheckCircle2 } from "lucide-react";
 import { formatArt } from "@/lib/time";
 import { FREE_LIMITS } from "@/lib/plans";
 import { ProBadge, ProBanner, TrialExpiringBanner } from "@/components/pro-gate";
 import { WhatsAppShare } from "@/components/whatsapp-share";
-import { adminGroupGenerateChampionshipSummary } from "../admin/actions";
+import {
+  adminGroupGenerateChampionshipSummary,
+  adminGroupStartNewChampionship,
+} from "../admin/actions";
 import { useApiData, useRouteParams } from "@/lib/client-api";
 
+type ArchivedChampionship = {
+  id: string;
+  name: string;
+  firstMatchFormatted: string | null;
+  endDateFormatted: string | null;
+  playedMatchesCount: number;
+  closedAt: string;
+  summary: string;
+  standings: {
+    playerId: number;
+    name: string;
+    pts: number;
+    gp: number;
+    won: number;
+    drawn: number;
+    lost: number;
+  }[];
+  topScorers: {
+    playerId: number;
+    name: string;
+    totalGoals: number;
+    totalAssists: number;
+  }[];
+};
+
 type ChampionshipInfo = {
-  endDate: string;
-  endDateFormatted: string;
+  name: string | null;
+  endDate: string | null;
+  endDateFormatted: string | null;
   firstMatchDate: string | Date | null;
   firstMatchFormatted: string | null;
   playedMatchesCount: number;
@@ -20,6 +49,7 @@ type ChampionshipInfo = {
   isFinishedChampionship: boolean;
   isLastMatchActive: boolean;
   summary: string | null;
+  history: ArchivedChampionship[];
 };
 
 type HistorialData = {
@@ -64,9 +94,18 @@ type HistorialData = {
 export function GroupHistorialClient() {
   const { groupSlug } = useRouteParams();
   const [isGeneratingSummary, startGenerating] = useTransition();
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [newChampionshipBanner, setNewChampionshipBanner] = useState(false);
   const { data, loading } = useApiData<HistorialData>(
     groupSlug ? `/api/page-data/group/${encodeURIComponent(groupSlug)}/historial` : null
   );
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const qs = new URLSearchParams(window.location.search);
+      setNewChampionshipBanner(qs.get("newChampionship") === "1");
+    }
+  }, []);
 
   if (!groupSlug || (loading && !data)) {
     return <div className="pt-8 text-center text-sm text-zinc-500">Cargando historial...</div>;
@@ -124,37 +163,114 @@ export function GroupHistorialClient() {
         </div>
       </div>
 
-      {championship && (
-        <div className="rounded-xl border border-amber-300/60 dark:border-amber-800/50 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-pitch-800 dark:text-zinc-200">
-            <span className="inline-flex items-center gap-1.5 font-extrabold text-amber-800 dark:text-amber-300">
-              <Flag className="text-amber-500 shrink-0" size={14} />
-              Campeonato:
-            </span>
-            <span>
-              <strong>Inicio:</strong> {championship.firstMatchFormatted ?? "Sin resultados"}
-            </span>
-            <span className="text-zinc-400">·</span>
-            <span>
-              <strong>Cierre:</strong> {championship.endDateFormatted}
-            </span>
-            <span className="text-zinc-400">·</span>
-            <span className="font-semibold">{championship.playedMatchesCount} PJ</span>
+      {newChampionshipBanner && (
+        <div className="rounded-2xl bg-emerald-500/15 p-3.5 text-xs sm:text-sm font-semibold text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-2.5">
+          <CheckCircle2 className="text-emerald-600 dark:text-emerald-400 shrink-0" size={20} />
+          <span>
+            ¡Campeonato cerrado y archivado! El nuevo torneo arrancó en blanco y ya podés ver el archivo estático más abajo.
+          </span>
+        </div>
+      )}
+
+      {(championship || (isAdmin && recentMatches.length > 0)) && (
+        <div className="space-y-2">
+          <div className="rounded-xl border border-amber-300/60 dark:border-amber-800/50 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-pitch-800 dark:text-zinc-200">
+              <span className="inline-flex items-center gap-1.5 font-extrabold text-amber-800 dark:text-amber-300">
+                <Flag className="text-amber-500 shrink-0" size={14} />
+                {championship?.name || "Campeonato"}:
+              </span>
+              <span>
+                <strong>Inicio:</strong> {championship?.firstMatchFormatted ?? "Sin resultados"}
+              </span>
+              {championship?.endDateFormatted && (
+                <>
+                  <span className="text-zinc-400">·</span>
+                  <span>
+                    <strong>Cierre:</strong> {championship.endDateFormatted}
+                  </span>
+                </>
+              )}
+              {championship && (
+                <>
+                  <span className="text-zinc-400">·</span>
+                  <span className="font-semibold">{championship.playedMatchesCount} PJ</span>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {championship?.endDate && (
+                championship.isFinishedChampionship ? (
+                  <span className="chip bg-emerald-600 text-white text-[11px] font-black px-2.5 py-0.5 shrink-0">
+                    🏁 Finalizado
+                  </span>
+                ) : championship.isLastMatchActive || championship.remainingMatchesCount === 1 ? (
+                  <span className="chip bg-amber-500 text-zinc-950 text-[11px] font-black px-2.5 py-0.5 shrink-0 animate-pulse">
+                    🔥 ¡Última fecha!
+                  </span>
+                ) : (
+                  <span className="chip bg-pitch-600 text-white text-[11px] font-black px-2.5 py-0.5 shrink-0">
+                    ⏳ {championship.remainingMatchesCount === 0
+                      ? "Sin fechas pendientes"
+                      : `Quedan ${championship.remainingMatchesCount} ${championship.remainingMatchesCount === 1 ? "partido" : "partidos"}`}
+                  </span>
+                )
+              )}
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setShowNewForm((v) => !v)}
+                  className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-200 border border-amber-500/40 transition-colors shrink-0"
+                >
+                  {showNewForm ? "Cancelar" : "🏁 Cerrar torneo y abrir nuevo"}
+                </button>
+              )}
+            </div>
           </div>
-          {championship.isFinishedChampionship ? (
-            <span className="chip bg-emerald-600 text-white text-[11px] font-black px-2.5 py-0.5 shrink-0">
-              🏁 Finalizado
-            </span>
-          ) : championship.isLastMatchActive || championship.remainingMatchesCount === 1 ? (
-            <span className="chip bg-amber-500 text-zinc-950 text-[11px] font-black px-2.5 py-0.5 shrink-0 animate-pulse">
-              🔥 ¡Última fecha!
-            </span>
-          ) : (
-            <span className="chip bg-pitch-600 text-white text-[11px] font-black px-2.5 py-0.5 shrink-0">
-              ⏳ {championship.remainingMatchesCount === 0
-                ? "Sin fechas pendientes"
-                : `Quedan ${championship.remainingMatchesCount} ${championship.remainingMatchesCount === 1 ? "partido" : "partidos"}`}
-            </span>
+
+          {isAdmin && showNewForm && (
+            <form
+              action={adminGroupStartNewChampionship}
+              onSubmit={(e) => {
+                if (
+                  !window.confirm(
+                    "¿Confirmás cerrar el campeonato actual e iniciar uno nuevo? El torneo terminado se guardará de forma estática con su reseña y las tablas actuales arrancarán en blanco."
+                  )
+                ) {
+                  e.preventDefault();
+                }
+              }}
+              className="rounded-2xl border border-amber-400/60 bg-white dark:bg-zinc-900 p-4 space-y-3 shadow-sm"
+            >
+              <input type="hidden" name="groupId" value={group.id} />
+              <input type="hidden" name="groupSlug" value={group.slug} />
+              <p className="text-xs text-pitch-900/70 dark:text-zinc-300 font-medium">
+                Se guardará <strong>{championship?.name || "el campeonato actual"}</strong> en el archivo estático con su tabla final y reseña, y se limpiarán estadísticas e historial para el nuevo torneo.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <input
+                  type="text"
+                  name="newChampionshipName"
+                  placeholder="Nombre del nuevo campeonato (ej: Clausura 2027)"
+                  className="input text-xs py-2"
+                  required
+                />
+                <input
+                  type="date"
+                  name="newChampionshipEndDate"
+                  className="input text-xs py-2"
+                  title="Fecha fin del nuevo campeonato (opcional)"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-zinc-950 font-black text-xs transition-colors"
+              >
+                Confirmar cierre e iniciar nuevo campeonato →
+              </button>
+            </form>
           )}
         </div>
       )}
@@ -329,14 +445,14 @@ export function GroupHistorialClient() {
               </p>
               <div className="pt-1">
                 <WhatsAppShare
-                  text={`🏆 *RESUMEN DEL CAMPEONATO — ${group.name.toUpperCase()}*\n📅 ${championship.firstMatchFormatted ? `Desde ${championship.firstMatchFormatted} hasta ` : "Cierre: "}${championship.endDateFormatted}\n\n${championship.summary}\n\n📲 Tabla completa en https://fulbomundial.com.ar/grupos/${group.slug}/historial`}
+                  text={`🏆 *RESUMEN DEL CAMPEONATO${championship.name ? `: ${championship.name.toUpperCase()}` : ""} — ${group.name.toUpperCase()}*\n📅 ${championship.firstMatchFormatted ? `Desde ${championship.firstMatchFormatted}` : "Temporada"}${championship.endDateFormatted ? ` hasta ${championship.endDateFormatted}` : ""}\n\n${championship.summary}\n\n📲 Tabla completa en https://fulbomundial.com.ar/grupos/${group.slug}/historial`}
                   label="Compartir resumen en WhatsApp"
                 />
               </div>
             </>
           ) : (
             <p className="text-xs text-zinc-400">
-              El resumen oficial se generará automáticamente al cerrar el último partido ({championship.endDateFormatted}), o podés generarlo hasta el momento.
+              El resumen oficial se generará automáticamente al cerrar el último partido ({championship.endDateFormatted || "al finalizar el torneo"}), o podés generarlo hasta el momento.
             </p>
           )}
         </div>
@@ -439,6 +555,126 @@ export function GroupHistorialClient() {
               ctaLabel="Desbloquear archivo completo"
             />
           )}
+        </div>
+      )}
+
+      {championship?.history && championship.history.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-bold text-pitch-700 dark:text-zinc-200 flex items-center gap-2">
+              <Archive size={18} className="text-amber-500" />
+              Campeonatos Finalizados (Archivo Estático)
+            </h2>
+            <span className="text-xs text-zinc-500">
+              {championship.history.length} {championship.history.length === 1 ? "torneo" : "torneos"}
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {championship.history.map((arch, idx) => {
+              const champion = arch.standings[0] ?? null;
+              return (
+                <details
+                  key={arch.id}
+                  open={idx === 0}
+                  className="card space-y-3 border border-amber-300/60 dark:border-amber-800/40"
+                >
+                  <summary className="cursor-pointer list-none flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-extrabold text-sm text-pitch-800 dark:text-amber-300">
+                        🏆 {arch.name}
+                      </span>
+                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {arch.firstMatchFormatted ? `${arch.firstMatchFormatted} → ` : ""}
+                        {arch.endDateFormatted || formatArt(arch.closedAt, "dd/MM/yyyy")}
+                      </span>
+                      <span className="chip bg-zinc-100 dark:bg-zinc-800 text-[11px] font-bold">
+                        {arch.playedMatchesCount} PJ
+                      </span>
+                    </div>
+                    {champion && (
+                      <span className="chip bg-amber-400/25 text-amber-900 dark:text-amber-200 text-[11px] font-black">
+                        👑 Campeón: {champion.name} ({champion.pts} pts)
+                      </span>
+                    )}
+                  </summary>
+
+                  <div className="space-y-3 pt-2 border-t border-zinc-200/70 dark:border-zinc-800">
+                    {arch.summary && (
+                      <div className="rounded-xl bg-zinc-950 text-zinc-100 p-3.5 space-y-2 border border-amber-500/30">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                          <Sparkles size={13} /> Reseña Oficial — {arch.name}
+                        </span>
+                        <p className="text-xs leading-relaxed whitespace-pre-line text-zinc-200">
+                          {arch.summary}
+                        </p>
+                        <WhatsAppShare
+                          text={`🏆 *ARCHIVO HISTÓRICO: ${arch.name.toUpperCase()} — ${group.name.toUpperCase()}*\n\n${arch.summary}\n\n📲 Ver archivo en https://fulbomundial.com.ar/grupos/${group.slug}/historial`}
+                          label="Compartir reseña en WhatsApp"
+                        />
+                      </div>
+                    )}
+
+                    {arch.standings.length > 0 && (
+                      <div className="overflow-x-auto rounded-xl border border-zinc-200/70 dark:border-zinc-800">
+                        <table className="w-full text-xs">
+                          <thead className="bg-pitch-50/70 dark:bg-zinc-900 text-left uppercase text-[10px] text-zinc-500">
+                            <tr>
+                              <th className="px-2.5 py-1.5">Jugador</th>
+                              <th className="px-2 py-1.5 text-center">Pts</th>
+                              <th className="px-2 py-1.5 text-center">PJ</th>
+                              <th className="px-2 py-1.5 text-center">G</th>
+                              <th className="px-2 py-1.5 text-center">E</th>
+                              <th className="px-2 py-1.5 text-center">P</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {arch.standings.map((r, rIdx) => (
+                              <tr
+                                key={r.playerId}
+                                className="border-t border-zinc-100 dark:border-zinc-800/60"
+                              >
+                                <td className="px-2.5 py-1.5 font-medium">
+                                  {rIdx === 0 && <span className="mr-1">👑</span>}
+                                  {r.name}
+                                </td>
+                                <td className="px-2 py-1.5 text-center font-black text-pitch-700 dark:text-pitch-400">
+                                  {r.pts}
+                                </td>
+                                <td className="px-2 py-1.5 text-center">{r.gp}</td>
+                                <td className="px-2 py-1.5 text-center text-pitch-700 dark:text-pitch-400">
+                                  {r.won}
+                                </td>
+                                <td className="px-2 py-1.5 text-center">{r.drawn}</td>
+                                <td className="px-2 py-1.5 text-center text-red-600 dark:text-red-400">
+                                  {r.lost}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {arch.topScorers.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 text-[11px]">
+                        <span className="font-bold text-zinc-500 mr-1">⚽ Goleadores:</span>
+                        {arch.topScorers.slice(0, 5).map((sc, sIdx) => (
+                          <span
+                            key={sc.playerId}
+                            className="chip bg-amber-50 dark:bg-zinc-800 border border-amber-200/60 dark:border-zinc-700 px-2 py-0.5 font-semibold"
+                          >
+                            {sIdx === 0 ? "🥇 " : ""}{sc.name}: {sc.totalGoals}G
+                            {sc.totalAssists > 0 ? ` / ${sc.totalAssists}A` : ""}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, Trophy, Calendar, Users, Bell, Flag } from "lucide-react";
-import { adminGroupSaveSettings } from "../actions";
+import { adminGroupSaveSettings, adminGroupStartNewChampionship } from "../actions";
 import { ProCard } from "@/components/pro-card";
 import { useApiData, useRouteParams } from "@/lib/client-api";
 
@@ -23,6 +23,7 @@ type ConfigData = {
     teamAName: string | null;
     teamBName: string | null;
     adminNotifyPreference?: string | null;
+    championshipName?: string | null;
     championshipEndDate?: string | null;
     championshipSummary?: string | null;
   };
@@ -139,24 +140,38 @@ function GroupAdminConfigContent() {
         <div className="card space-y-4 border-amber-200/80 dark:border-amber-900/40">
           <div className="flex items-center gap-2 border-b border-amber-100/60 dark:border-zinc-800 pb-2">
             <Flag size={20} className="text-amber-500" />
-            <h2 className="font-bold text-pitch-800 dark:text-zinc-100">Fin de Campeonato</h2>
+            <h2 className="font-bold text-pitch-800 dark:text-zinc-100">Campeonato en Curso</h2>
           </div>
 
           <p className="text-xs text-pitch-900/60 dark:text-zinc-400">
-            Definí la fecha de cierre del torneo (por ejemplo: <em>Miércoles 30 de Diciembre</em>).
-            En el Historial se mostrará cuándo se jugó el primer partido guardado, cuántos partidos quedan para el cierre, se enviará un aviso a todos en la última fecha y al cerrarla se generará el resumen oficial del campeonato en base a notas y votaciones.
+            Asignale un nombre al torneo vigente (se mostrará de forma discreta en el inicio del grupo para distinguirlo) y definí su fecha de cierre (ej: <em>Miércoles 30 de Diciembre</em>).
           </p>
 
-          <div>
-            <label className="block text-xs font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">
-              Fecha fin de campeonato (opcional)
-            </label>
-            <input
-              type="date"
-              name="championshipEndDate"
-              defaultValue={group.championshipEndDate ?? ""}
-              className="input w-full"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">
+                Nombre del campeonato
+              </label>
+              <input
+                type="text"
+                name="championshipName"
+                defaultValue={group.championshipName ?? ""}
+                placeholder="Ej: Torneo Clausura 2026"
+                className="input w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">
+                Fecha fin de campeonato (opcional)
+              </label>
+              <input
+                type="date"
+                name="championshipEndDate"
+                defaultValue={group.championshipEndDate ?? ""}
+                className="input w-full"
+              />
+            </div>
           </div>
         </div>
 
@@ -255,6 +270,63 @@ function GroupAdminConfigContent() {
 
         <button type="submit" className="btn-primary w-full py-3 font-bold text-base shadow-glow-green">
           💾 Guardar configuración
+        </button>
+      </form>
+
+      <form
+        action={adminGroupStartNewChampionship}
+        onSubmit={(e) => {
+          if (
+            !window.confirm(
+              "¿Cerrar el campeonato actual y comenzar uno nuevo? El torneo actual se guardará con su tabla final y reseña en el Historial, y las estadísticas e historial actuales arrancarán todos en blanco."
+            )
+          ) {
+            e.preventDefault();
+          }
+        }}
+        className="card space-y-4 border-2 border-amber-400/60 bg-amber-50/40 dark:bg-amber-950/15 dark:border-amber-800/60"
+      >
+        <input type="hidden" name="groupId" value={group.id} />
+        <input type="hidden" name="groupSlug" value={group.slug} />
+
+        <div className="flex items-center gap-2 border-b border-amber-200/70 dark:border-zinc-800 pb-2">
+          <Trophy size={20} className="text-amber-600 dark:text-amber-400" />
+          <h2 className="font-bold text-amber-950 dark:text-amber-200">
+            Cerrar Campeonato Actual e Iniciar Nuevo Torneo
+          </h2>
+        </div>
+
+        <p className="text-xs text-pitch-900/70 dark:text-zinc-400">
+          Al confirmar esta acción de forma manual, el campeonato actual (<strong>{group.championshipName || "Campeonato"}</strong>) quedará guardado de forma estática con su tabla final y reseña en el Historial. Las estadísticas e historial activos se limpiarán para arrancar todos en blanco en el nuevo torneo.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold mb-1 text-pitch-900/80 dark:text-zinc-300">
+              Nombre del nuevo campeonato *
+            </label>
+            <input
+              type="text"
+              name="newChampionshipName"
+              placeholder="Ej: Torneo Apertura 2027"
+              className="input w-full"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold mb-1 text-pitch-900/80 dark:text-zinc-300">
+              Fecha fin del nuevo campeonato (opcional)
+            </label>
+            <input type="date" name="newChampionshipEndDate" className="input w-full" />
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-zinc-950 font-black text-sm shadow-sm transition-colors"
+        >
+          🏁 Cerrar torneo actual y comenzar nuevo campeonato
         </button>
       </form>
     </div>

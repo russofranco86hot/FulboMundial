@@ -70,9 +70,12 @@ export const groups = pgTable(
     teamBName: text("team_b_name").notNull().default("Oscuro"),
     // Preferencias de notificaciones de administración
     adminNotifyPreference: text("admin_notify_preference").notNull().default("both"), // 'both' | 'email' | 'push' | 'none'
-    // Campeonato (fecha fin y resumen generado)
+    // Campeonato (nombre, fecha fin, inicio del ciclo actual, resumen e historial estático)
+    championshipName: text("championship_name"),
     championshipEndDate: text("championship_end_date"), // "YYYY-MM-DD"
+    championshipStartedAt: timestamp("championship_started_at", { withTimezone: true }),
     championshipSummary: text("championship_summary"),
+    championshipHistory: jsonb("championship_history"),
     // Monetización / Plan PRO (Freemium B2C)
     isPro: boolean("is_pro").notNull().default(false),
     proPlan: text("pro_plan"), // 'pro_monthly' | 'pro_annual' | 'pro_lifetime'

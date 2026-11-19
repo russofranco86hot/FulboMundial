@@ -1,6 +1,6 @@
 import { requestCache as cache } from "./request-context";
 import { db, matches, results, teams, players } from "@/db";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
 export type PairStat = {
   player1: string;
@@ -54,36 +54,57 @@ export type StreakStat = {
 };
 
 export const getAdvancedStats = cache(async (groupId?: number) => {
+  const { groups } = await import("@/db/schema");
   let targetGroupId = groupId;
   if (!targetGroupId) {
-    const { groups } = await import("@/db/schema");
     const g = (await db.select({ id: groups.id }).from(groups).where(eq(groups.slug, "futbol-miercoles")).limit(1))[0]
       || (await db.select({ id: groups.id }).from(groups).limit(1))[0];
     if (g) targetGroupId = g.id;
   }
 
+  const startedAt = targetGroupId
+    ? await db
+        .select({ championshipStartedAt: groups.championshipStartedAt })
+        .from(groups)
+        .where(eq(groups.id, targetGroupId))
+        .limit(1)
+        .then((r) => r[0]?.championshipStartedAt ?? null)
+    : null;
+
   const whereMatch = targetGroupId
-    ? and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"))
+    ? startedAt
+      ? and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"), gte(results.createdAt, startedAt))
+      : and(eq(matches.groupId, targetGroupId), eq(matches.status, "finished"))
     : eq(matches.status, "finished");
 
-  const [allMatches, allTeams] = await Promise.all([
-    db
-      .select({
-        id: matches.id,
-        matchDate: matches.matchDate,
-        result: results.result,
-      })
-      .from(matches)
-      .innerJoin(results, eq(matches.id, results.matchId))
-      .where(whereMatch)
-      .orderBy(desc(matches.matchDate)),
-    db
-      .select({ matchId: teams.matchId, playerId: teams.playerId, team: teams.team, name: players.name })
-      .from(teams)
-      .innerJoin(matches, eq(matches.id, teams.matchId))
-      .innerJoin(players, eq(players.id, teams.playerId))
-      .where(and(sql`${teams.playerId} IS NOT NULL`, whereMatch)),
-  ]);
+  const allMatches = await db
+    .select({
+      id: matches.id,
+      matchDate: matches.matchDate,
+      result: results.result,
+    })
+    .from(matches)
+    .innerJoin(results, eq(matches.id, results.matchId))
+    .where(whereMatch)
+    .orderBy(desc(matches.matchDate));
+
+  if (allMatches.length === 0) {
+    return {
+      topChemistry: [] as PairStat[],
+      topPaternity: [] as MatchupStat[],
+      streaks: [] as StreakStat[],
+      talismans: [] as PlayerLuckStat[],
+      mufas: [] as PlayerLuckStat[],
+      toxicDuos: [] as ToxicPairStat[],
+      classicRivals: [] as RivalryStat[],
+    };
+  }
+
+  const allTeams = await db
+    .select({ matchId: teams.matchId, playerId: teams.playerId, team: teams.team, name: players.name })
+    .from(teams)
+    .innerJoin(players, eq(players.id, teams.playerId))
+    .where(and(sql`${teams.playerId} IS NOT NULL`, inArray(teams.matchId, allMatches.map((m) => m.id))));
 
   // Build match rosters (solo del grupo)
   const matchRosters: Record<number, { A: {id: number, name: string}[], B: {id: number, name: string}[] }> = {};

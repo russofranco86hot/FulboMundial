@@ -24,7 +24,14 @@ type StandingItem = {
 
 type GroupHomeData = {
   blocked?: boolean;
-  group: { id: number; name: string; slug: string; teamAName: string | null; teamBName: string | null };
+  group: {
+    id: number;
+    name: string;
+    slug: string;
+    teamAName: string | null;
+    teamBName: string | null;
+    championshipName?: string | null;
+  };
   player: { id: number; name: string; isGoalkeeper: boolean };
   isReadOnlySuperAdmin: boolean;
   proStatus: { isExpiringSoon: boolean; daysRemaining: number | null };
@@ -242,8 +249,15 @@ export function GroupHomeClient() {
       ) : (
         <div className="card space-y-4 animate-slide-up">
           <div className="text-center">
-            <div className="chip bg-pitch-100 text-pitch-700 dark:bg-zinc-800 dark:text-pitch-400">
-              {isOpen ? "Lista abierta" : "Lista cerrada"}
+            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+              <div className="chip bg-pitch-100 text-pitch-700 dark:bg-zinc-800 dark:text-pitch-400">
+                {isOpen ? "Lista abierta" : "Lista cerrada"}
+              </div>
+              {group.championshipName && (
+                <div className="chip bg-amber-100/80 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[11px] font-bold">
+                  🏆 {group.championshipName}
+                </div>
+              )}
             </div>
             <h2 className="mt-2 text-xl font-bold capitalize dark:text-zinc-100">
               {formatArt(match.matchDate, "EEEE dd/MM 'a las' HH:mm")}

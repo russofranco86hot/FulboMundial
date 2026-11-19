@@ -68,7 +68,10 @@ export async function getGroupTopScorers(groupId: number, limitN = 15): Promise<
       FROM ${matchGoals} mg
       JOIN ${matches} m ON m.id = mg.match_id
       JOIN ${players} p ON p.id = mg.player_id
+      JOIN "groups" g ON g.id = m.group_id
+      LEFT JOIN "results" r ON r.match_id = m.id
       WHERE m.group_id = ${groupId}
+        AND (g.championship_started_at IS NULL OR COALESCE(r.created_at, mg.created_at) >= g.championship_started_at)
       GROUP BY p.id, p.name, p.stars, p.is_goalkeeper
       HAVING COALESCE(SUM(mg.goals), 0) > 0 OR COALESCE(SUM(mg.assists), 0) > 0
       ORDER BY total_goals DESC, total_assists DESC, p.name ASC
