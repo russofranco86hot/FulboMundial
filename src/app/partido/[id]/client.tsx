@@ -40,6 +40,7 @@ type PublicPartidoData = {
   notes?: { id: number; authorName: string; authorId: number; note: string; createdAt: string | Date }[];
   matchGoals?: { id: number; playerId: number; name: string; goals: number; assists: number }[];
   player?: { id: number } | null;
+  groupMembers?: { playerId: number; name: string }[];
 };
 
 export function PublicPartidoClient() {
@@ -142,6 +143,7 @@ export function PublicPartidoClient() {
         matchId={matchId}
         groupSlug={groupSlug}
         teams={match.teams}
+        members={data.groupMembers}
         notes={notes.map((n) => ({ ...n, createdAt: new Date(n.createdAt) }))}
         votes={votes}
         currentUserId={player?.id}

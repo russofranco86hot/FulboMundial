@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle, Info, ArrowRightLeft, ExternalLink, Bell } from "lucide-react";
@@ -52,6 +52,14 @@ function GroupAdminResultadoContent() {
   const { data, loading } = useApiData<AdminResultadoData>(
     groupSlug ? `/api/page-data/group/${encodeURIComponent(groupSlug)}/admin/resultado${qs}` : null
   );
+
+  const [scoreA, setScoreA] = useState<number>(0);
+  const [scoreB, setScoreB] = useState<number>(0);
+
+  useEffect(() => {
+    setScoreA(data?.existing?.scoreA ?? 0);
+    setScoreB(data?.existing?.scoreB ?? 0);
+  }, [data?.match?.id, data?.existing?.scoreA, data?.existing?.scoreB]);
 
   if (!groupSlug || (loading && !data) || !data?.allowed || !data.group) {
     return <div className="pt-8 text-center text-sm text-zinc-500">Cargando resultados...</div>;
@@ -219,7 +227,8 @@ function GroupAdminResultadoContent() {
               type="number"
               name="scoreA"
               min="0"
-              defaultValue={existing?.scoreA ?? 0}
+              value={scoreA}
+              onChange={(e) => setScoreA(Math.max(0, Number(e.target.value) || 0))}
               className="input text-center text-5xl font-extrabold h-24 w-24 bg-white dark:bg-zinc-800 shadow-inner rounded-2xl"
             />
             <div className="mt-4 w-full pt-3 border-t border-pitch-200/50 dark:border-zinc-700/50">
@@ -238,7 +247,8 @@ function GroupAdminResultadoContent() {
               type="number"
               name="scoreB"
               min="0"
-              defaultValue={existing?.scoreB ?? 0}
+              value={scoreB}
+              onChange={(e) => setScoreB(Math.max(0, Number(e.target.value) || 0))}
               className="input text-center text-5xl font-extrabold h-24 w-24 bg-white dark:bg-zinc-800 shadow-inner rounded-2xl border-blue-200 dark:border-blue-800/50 focus:ring-blue-500"
             />
             <div className="mt-4 w-full pt-3 border-t border-blue-200/50 dark:border-zinc-700/50">
@@ -349,11 +359,21 @@ function GroupAdminResultadoContent() {
           inputData={{
             matchDate: match.matchDate,
             teamAName,
-            scoreA: existing?.scoreA ?? 0,
+            scoreA,
             teamBName,
-            scoreB: existing?.scoreB ?? 0,
+            scoreB,
             playersA: teamA.map((t) => t.name),
             playersB: teamB.map((t) => t.name),
+            playerRolesA: teamA.map((t) => ({
+              name: t.name,
+              position: t.preferredPosition,
+              isGoalkeeper: t.isGoalkeeper,
+            })),
+            playerRolesB: teamB.map((t) => ({
+              name: t.name,
+              position: t.preferredPosition,
+              isGoalkeeper: t.isGoalkeeper,
+            })),
             scorers: [
               ...teamA
                 .filter((t) => t.playerId && (goalsMap.get(t.playerId)?.goals ?? 0) > 0)

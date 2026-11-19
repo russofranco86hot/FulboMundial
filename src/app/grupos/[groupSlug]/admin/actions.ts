@@ -129,3 +129,7 @@ export async function adminGroupResetPassword(formData: FormData): Promise<void>
 export async function adminGroupSaveMatchGoals(formData: FormData): Promise<void> {
   await callRpc<void>("group-admin", "adminGroupSaveMatchGoals", [formData]);
 }
+
+export async function adminGroupGenerateChampionshipSummary(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupGenerateChampionshipSummary", [formData]);
+}

@@ -7,15 +7,17 @@ let schemaUpgradesChecked = false;
 
 /**
  * Asegura que las columnas críticas añadidas recientemente existan en la tabla groups, players y matches.
- * Solo corre si RUN_DB_MIGRATIONS="true" para evitar 4 consultas DDL en cada cold start del Worker.
+ * Solo corre si RUN_DB_MIGRATIONS="true" o force=true para evitar 4 consultas DDL en cada cold start del Worker.
  */
-export async function ensureAdminNotifyPreferenceColumn(): Promise<void> {
-  if (process.env.RUN_DB_MIGRATIONS !== "true") return;
+export async function ensureAdminNotifyPreferenceColumn(force = false): Promise<void> {
+  if (!force && process.env.RUN_DB_MIGRATIONS !== "true") return;
   if (schemaUpgradesChecked) return;
   try {
     await db.execute(sql`
       ALTER TABLE groups 
         ADD COLUMN IF NOT EXISTS admin_notify_preference TEXT NOT NULL DEFAULT 'both',
+        ADD COLUMN IF NOT EXISTS championship_end_date TEXT,
+        ADD COLUMN IF NOT EXISTS championship_summary TEXT,
         ADD COLUMN IF NOT EXISTS pts_win INTEGER NOT NULL DEFAULT 3,
         ADD COLUMN IF NOT EXISTS pts_draw INTEGER NOT NULL DEFAULT 2,
         ADD COLUMN IF NOT EXISTS pts_loss INTEGER NOT NULL DEFAULT 1,
@@ -95,6 +97,8 @@ async function runMigrationsOnce(): Promise<void> {
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS team_a_name TEXT;`);
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS team_b_name TEXT;`);
     await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS admin_notify_preference TEXT NOT NULL DEFAULT 'both';`);
+    await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS championship_end_date TEXT;`);
+    await db.execute(sql`ALTER TABLE groups ADD COLUMN IF NOT EXISTS championship_summary TEXT;`);
   } catch (err) {
     console.error("Error running DB upgrades:", err);
   }

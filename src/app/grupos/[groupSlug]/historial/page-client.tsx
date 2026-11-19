@@ -1,11 +1,26 @@
 "use client";
 
+import { useTransition } from "react";
 import Link from "next/link";
-import { Trophy } from "lucide-react";
+import { Trophy, Flag, Calendar, Sparkles } from "lucide-react";
 import { formatArt } from "@/lib/time";
 import { FREE_LIMITS } from "@/lib/plans";
 import { ProBadge, ProBanner, TrialExpiringBanner } from "@/components/pro-gate";
+import { WhatsAppShare } from "@/components/whatsapp-share";
+import { adminGroupGenerateChampionshipSummary } from "../admin/actions";
 import { useApiData, useRouteParams } from "@/lib/client-api";
+
+type ChampionshipInfo = {
+  endDate: string;
+  endDateFormatted: string;
+  firstMatchDate: string | Date | null;
+  firstMatchFormatted: string | null;
+  playedMatchesCount: number;
+  remainingMatchesCount: number;
+  isFinishedChampionship: boolean;
+  isLastMatchActive: boolean;
+  summary: string | null;
+};
 
 type HistorialData = {
   blocked?: boolean;
@@ -43,10 +58,12 @@ type HistorialData = {
     matchesWithGoals: number;
   }[];
   isAdmin: boolean;
+  championship?: ChampionshipInfo | null;
 };
 
 export function GroupHistorialClient() {
   const { groupSlug } = useRouteParams();
+  const [isGeneratingSummary, startGenerating] = useTransition();
   const { data, loading } = useApiData<HistorialData>(
     groupSlug ? `/api/page-data/group/${encodeURIComponent(groupSlug)}/historial` : null
   );
@@ -56,12 +73,21 @@ export function GroupHistorialClient() {
   }
   if (!data || data.blocked || !data.group) return null;
 
-  const { group, proStatus, rows, recentMatches, topScorers, isAdmin } = data;
+  const { group, proStatus, rows, recentMatches, topScorers, isAdmin, championship } = data;
   const proActive = proStatus.isPro;
   const visibleMatches = proActive
     ? recentMatches
     : recentMatches.slice(0, FREE_LIMITS.maxRecentMatchesInHistory);
   const hiddenMatchesCount = Math.max(0, recentMatches.length - visibleMatches.length);
+
+  const handleGenerateSummary = () => {
+    startGenerating(async () => {
+      const fd = new FormData();
+      fd.set("groupId", String(group.id));
+      fd.set("groupSlug", group.slug);
+      await adminGroupGenerateChampionshipSummary(fd);
+    });
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -97,6 +123,108 @@ export function GroupHistorialClient() {
           </div>
         </div>
       </div>
+
+      {championship && (
+        <div className="card space-y-4 border-2 border-amber-400/50 bg-gradient-to-br from-amber-50/70 via-white to-pitch-50/40 dark:from-amber-950/20 dark:via-zinc-900 dark:to-zinc-950">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h2 className="font-extrabold text-base sm:text-lg text-pitch-800 dark:text-amber-300 flex items-center gap-2">
+              <Flag className="text-amber-500 shrink-0" size={20} />
+              Estado del Campeonato
+            </h2>
+            {championship.isFinishedChampionship ? (
+              <span className="chip bg-emerald-600 text-white text-xs font-black px-3 py-1">
+                🏁 Campeonato finalizado
+              </span>
+            ) : championship.isLastMatchActive || championship.remainingMatchesCount === 1 ? (
+              <span className="chip bg-amber-500 text-zinc-950 text-xs font-black px-3 py-1 animate-pulse">
+                🔥 ¡Última fecha del campeonato!
+              </span>
+            ) : (
+              <span className="chip bg-pitch-600 text-white text-xs font-black px-3 py-1">
+                ⏳ {championship.remainingMatchesCount === 0
+                  ? "Sin fechas pendientes"
+                  : `Quedan ${championship.remainingMatchesCount} ${championship.remainingMatchesCount === 1 ? "partido" : "partidos"}`}
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="p-3 rounded-2xl bg-white/80 dark:bg-zinc-800/60 border border-amber-200/60 dark:border-zinc-700/70">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
+                <Calendar size={12} /> Primer partido guardado
+              </span>
+              <p className="font-bold text-sm text-pitch-800 dark:text-zinc-100 mt-1">
+                {championship.firstMatchFormatted ?? "Sin resultados guardados aún"}
+              </p>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-white/80 dark:bg-zinc-800/60 border border-amber-200/60 dark:border-zinc-700/70">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
+                <Flag size={12} /> Fin de campeonato
+              </span>
+              <p className="font-bold text-sm text-amber-700 dark:text-amber-300 mt-1">
+                {championship.endDateFormatted}
+              </p>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-white/80 dark:bg-zinc-800/60 border border-amber-200/60 dark:border-zinc-700/70">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1">
+                <Trophy size={12} /> Balance de fechas
+              </span>
+              <p className="font-bold text-sm text-pitch-800 dark:text-zinc-100 mt-1">
+                {championship.playedMatchesCount} {championship.playedMatchesCount === 1 ? "jugado" : "jugados"} ·{" "}
+                {championship.isFinishedChampionship
+                  ? "Torneo completo"
+                  : championship.remainingMatchesCount === 1
+                  ? "Queda 1 partido"
+                  : `Quedan ${championship.remainingMatchesCount}`}
+              </p>
+            </div>
+          </div>
+
+          {(championship.summary || isAdmin) && (
+            <div className="rounded-2xl bg-zinc-950 text-zinc-100 p-4 space-y-3 border border-amber-500/30">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-xs font-black uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                  <Sparkles size={14} /> Resumen Oficial del Torneo (Notas y Votaciones)
+                </span>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleGenerateSummary}
+                    disabled={isGeneratingSummary}
+                    className="text-[11px] font-bold px-3 py-1 rounded-full bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 transition-colors"
+                  >
+                    {isGeneratingSummary
+                      ? "Generando resumen..."
+                      : championship.summary
+                      ? "Actualizar resumen"
+                      : "Generar resumen del torneo"}
+                  </button>
+                )}
+              </div>
+
+              {championship.summary ? (
+                <>
+                  <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-line text-zinc-200">
+                    {championship.summary}
+                  </p>
+                  <div className="pt-1">
+                    <WhatsAppShare
+                      text={`🏆 *RESUMEN DEL CAMPEONATO — ${group.name.toUpperCase()}*\n📅 ${championship.firstMatchFormatted ? `Desde ${championship.firstMatchFormatted} hasta ` : "Cierre: "}${championship.endDateFormatted}\n\n${championship.summary}\n\n📲 Tabla completa en https://fulbomundial.com.ar/grupos/${group.slug}/historial`}
+                      label="Compartir resumen en WhatsApp"
+                    />
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-zinc-400">
+                  El resumen oficial se generará automáticamente al cerrar el último partido ({championship.endDateFormatted}), o podés generarlo ahora.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="space-y-3">
         <h2 className="font-bold text-pitch-700 dark:text-zinc-200">Posiciones Históricas</h2>

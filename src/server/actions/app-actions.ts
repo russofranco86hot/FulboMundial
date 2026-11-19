@@ -1,7 +1,7 @@
 
 import { rpcRevalidatePath as revalidatePath } from "../redirect";
 import { and, eq, isNull } from "drizzle-orm";
-import { db, signups, matches, players } from "@/db";
+import { db, signups, matches, players, groupMembers, teams } from "@/db";
 import { getCurrentPlayer, getSessionUser, isGroupMember } from "@/lib/session";
 import { getCurrentMatch, getSelection } from "@/lib/queries";
 import { handlePostCloseWithdrawal } from "@/lib/match-actions";
@@ -132,17 +132,103 @@ export async function toggleThirdHalfAction(staying: boolean, groupId?: number, 
   return { ok: true };
 }
 
-export async function addMatchNoteAction(matchId: number, note: string, groupSlug?: string): Promise<ActionResult> {
+function normalizeMentionText(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+export async function addMatchNoteAction(
+  matchId: number,
+  note: string,
+  groupSlug?: string,
+  mentionedPlayerIds?: number[]
+): Promise<ActionResult> {
   const player = await getCurrentPlayer();
   if (!player) return { ok: false, error: "No estás vinculado" };
-  if (!note.trim()) return { ok: false, error: "La nota no puede estar vacía" };
+  const trimmedNote = note.trim();
+  if (!trimmedNote) return { ok: false, error: "La nota no puede estar vacía" };
 
   const { matchNotes } = await import("@/db/schema");
   await db.insert(matchNotes).values({
     matchId,
     playerId: player.id,
-    note: note.trim(),
+    note: trimmedNote,
   });
+
+  // Resolver menciones (@Nombre o IDs explícitos) para notificar por push a los miembros elegidos
+  try {
+    const matchRow = (
+      await db
+        .select({ groupId: matches.groupId })
+        .from(matches)
+        .where(eq(matches.id, matchId))
+        .limit(1)
+    )[0];
+
+    const candidatesMap = new Map<number, string>();
+    if (matchRow?.groupId) {
+      const members = await db
+        .select({ id: players.id, name: players.name })
+        .from(groupMembers)
+        .innerJoin(players, eq(players.id, groupMembers.playerId))
+        .where(and(eq(groupMembers.groupId, matchRow.groupId), eq(groupMembers.status, "active")));
+      for (const m of members) candidatesMap.set(m.id, m.name);
+    }
+
+    const teamPlayers = await db
+      .select({ id: players.id, name: players.name })
+      .from(teams)
+      .innerJoin(players, eq(players.id, teams.playerId))
+      .where(eq(teams.matchId, matchId));
+    for (const tp of teamPlayers) {
+      if (tp.id) candidatesMap.set(tp.id, tp.name);
+    }
+
+    const targets = new Set<number>();
+    if (Array.isArray(mentionedPlayerIds)) {
+      for (const rawId of mentionedPlayerIds) {
+        const pid = Number(rawId);
+        if (pid && !Number.isNaN(pid) && candidatesMap.has(pid)) {
+          targets.add(pid);
+        }
+      }
+    }
+
+    // Detectar también @Nombre escritos manualmente en el comentario
+    const normalizedNote = normalizeMentionText(trimmedNote);
+    if (normalizedNote.includes("@")) {
+      const sortedCandidates = Array.from(candidatesMap.entries()).sort(
+        (a, b) => b[1].length - a[1].length
+      );
+      for (const [pid, rawName] of sortedCandidates) {
+        const normName = normalizeMentionText(rawName);
+        if (!normName) continue;
+        const escaped = normName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const rx = new RegExp(`(?:^|\\s)@${escaped}(?=$|[\\s.,;:!?])`);
+        if (rx.test(normalizedNote)) {
+          targets.add(pid);
+        }
+      }
+    }
+
+    const targetUrl = groupSlug
+      ? `/grupos/${groupSlug}/historial/${matchId}`
+      : `/partido/${matchId}`;
+
+    for (const targetPlayerId of targets) {
+      await pushToPlayer(targetPlayerId, {
+        title: `💬 ${player.name} te mencionó en un comentario`,
+        body: trimmedNote.slice(0, 140),
+        url: targetUrl,
+        tag: `mention-${matchId}-${targetPlayerId}-${Date.now()}`,
+      });
+    }
+  } catch (err) {
+    console.error("[addMatchNoteAction] Error enviando push por mención:", err);
+  }
 
   if (groupSlug) {
     revalidatePath(`/grupos/${groupSlug}/historial/${matchId}`);
@@ -175,23 +261,34 @@ export async function voteMatchAwardAction(
       set: { candidateId, createdAt: new Date() },
     });
 
-  if (candidateId !== player.id) {
-    const awardsConfig = {
-      mvp: { title: "¡Te votaron como Figura! 🥇", body: "¡Alguien te votó como el MVP del partido!" },
-      tronco: { title: "¡Te votaron como Tronco! 🪵", body: "¡Alguien te eligió como el rústico de la fecha!" },
-      gol: { title: "¡Te votaron por Mejor Gol! ⚽", body: "¡Alguien votó tu gol como la joya del partido!" },
-    };
-    const award = awardsConfig[categoryId];
-    if (award) {
-      const url = groupSlug
-        ? `/grupos/${groupSlug}/historial/${matchId}`
-        : `/historial/${matchId}`;
-      pushToPlayer(candidateId, {
+  const awardsConfig = {
+    mvp: {
+      title: "¡Te votaron como MVP! ⭐",
+      body: `¡${player.name} te eligió como la Figura del partido!`,
+    },
+    tronco: {
+      title: "¡Te votaron como Tronco! 🪵",
+      body: `¡${player.name} te eligió como el rústico de la fecha!`,
+    },
+    gol: {
+      title: "¡Te votaron por Mejor Gol! ⚽",
+      body: `¡${player.name} eligió tu gol como la joya del partido!`,
+    },
+  };
+  const award = awardsConfig[categoryId];
+  if (award && candidateId) {
+    const url = groupSlug
+      ? `/grupos/${groupSlug}/historial/${matchId}`
+      : `/historial/${matchId}`;
+    try {
+      await pushToPlayer(candidateId, {
         title: award.title,
         body: award.body,
         url,
         tag: `voto-${matchId}-${categoryId}-${Date.now()}`,
-      }).catch(console.error);
+      });
+    } catch (err) {
+      console.error("[voteMatchAwardAction] Error enviando push:", err);
     }
   }
 

@@ -29,6 +29,7 @@ type HistorialDetailData = {
   matchGoals: { id: number; playerId: number; name: string; goals: number; assists: number }[];
   player: { id: number } | null;
   isAdmin: boolean;
+  groupMembers?: { playerId: number; name: string }[];
 };
 
 export function GroupMatchDetailPageClient() {
@@ -148,6 +149,14 @@ export function GroupMatchDetailPageClient() {
               scoreB: match.scoreB ?? 0,
               playersA: teamA.map((t) => t.name),
               playersB: teamB.map((t) => t.name),
+              playerRolesA: teamA.map((t) => ({
+                name: t.name,
+                isGoalkeeper: t.isGoalkeeper,
+              })),
+              playerRolesB: teamB.map((t) => ({
+                name: t.name,
+                isGoalkeeper: t.isGoalkeeper,
+              })),
               scorers: matchGoals.map((g) => ({
                 name: g.name,
                 goals: g.goals,
@@ -219,6 +228,7 @@ export function GroupMatchDetailPageClient() {
         matchId={matchId}
         groupSlug={groupSlug}
         teams={match.teams}
+        members={data.groupMembers}
         notes={notes.map((n) => ({ ...n, createdAt: new Date(n.createdAt) }))}
         votes={votes}
         currentUserId={player?.id}

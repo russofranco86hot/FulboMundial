@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, Trophy, Calendar, Users, Bell } from "lucide-react";
+import { CheckCircle2, Trophy, Calendar, Users, Bell, Flag } from "lucide-react";
 import { adminGroupSaveSettings } from "../actions";
 import { ProCard } from "@/components/pro-card";
 import { useApiData, useRouteParams } from "@/lib/client-api";
@@ -23,6 +23,8 @@ type ConfigData = {
     teamAName: string | null;
     teamBName: string | null;
     adminNotifyPreference?: string | null;
+    championshipEndDate?: string | null;
+    championshipSummary?: string | null;
   };
   isPro?: boolean;
 };
@@ -131,6 +133,30 @@ function GroupAdminConfigContent() {
               <label className="block text-xs font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Hora habitual</label>
               <input type="time" name="defaultTime" defaultValue={group.defaultTime ?? "21:00"} className="input w-full" required />
             </div>
+          </div>
+        </div>
+
+        <div className="card space-y-4 border-amber-200/80 dark:border-amber-900/40">
+          <div className="flex items-center gap-2 border-b border-amber-100/60 dark:border-zinc-800 pb-2">
+            <Flag size={20} className="text-amber-500" />
+            <h2 className="font-bold text-pitch-800 dark:text-zinc-100">Fin de Campeonato</h2>
+          </div>
+
+          <p className="text-xs text-pitch-900/60 dark:text-zinc-400">
+            Definí la fecha de cierre del torneo (por ejemplo: <em>Miércoles 30 de Diciembre</em>).
+            En el Historial se mostrará cuándo se jugó el primer partido guardado, cuántos partidos quedan para el cierre, se enviará un aviso a todos en la última fecha y al cerrarla se generará el resumen oficial del campeonato en base a notas y votaciones.
+          </p>
+
+          <div>
+            <label className="block text-xs font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">
+              Fecha fin de campeonato (opcional)
+            </label>
+            <input
+              type="date"
+              name="championshipEndDate"
+              defaultValue={group.championshipEndDate ?? ""}
+              className="input w-full"
+            />
           </div>
         </div>
 

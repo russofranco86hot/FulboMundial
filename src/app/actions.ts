@@ -35,9 +35,19 @@ export async function toggleThirdHalfAction(staying: boolean, groupId?: number, 
   }
 }
 
-export async function addMatchNoteAction(matchId: number, note: string, groupSlug?: string) : Promise<ActionResult> {
+export async function addMatchNoteAction(
+  matchId: number,
+  note: string,
+  groupSlug?: string,
+  mentionedPlayerIds?: number[]
+): Promise<ActionResult> {
   try {
-    return await callRpc<ActionResult>("app", "addMatchNoteAction", [matchId, note, groupSlug]);
+    return await callRpc<ActionResult>("app", "addMatchNoteAction", [
+      matchId,
+      note,
+      groupSlug,
+      mentionedPlayerIds,
+    ]);
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Error de conexión" };
   }

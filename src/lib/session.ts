@@ -209,6 +209,8 @@ async function queryPlayerGroups(playerId: number) {
       teamAName: groups.teamAName,
       teamBName: groups.teamBName,
       adminNotifyPreference: groups.adminNotifyPreference,
+      championshipEndDate: groups.championshipEndDate,
+      championshipSummary: groups.championshipSummary,
       isPro: groups.isPro,
       proPlan: groups.proPlan,
       proExpiresAt: groups.proExpiresAt,
@@ -242,7 +244,7 @@ export const getPlayerGroups = cache(
         return await queryPlayerGroups(player.id);
       } catch (err: any) {
         console.warn("[getPlayerGroups] Error querying groups, ensuring schema and retrying:", err?.message || err);
-        await ensureAdminNotifyPreferenceColumn();
+        await ensureAdminNotifyPreferenceColumn(true);
         return await queryPlayerGroups(player.id);
       }
     } catch (err) {

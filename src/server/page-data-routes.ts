@@ -43,6 +43,7 @@ import {
   verifyAndActivateMercadoPagoPayment,
 } from "@/lib/billing";
 import { isSuperAdmin, getSuperAdminDashboardData } from "@/lib/superadmin";
+import { getChampionshipInfo } from "@/lib/championship";
 
 export const pageDataApp = new Hono();
 
@@ -272,6 +273,14 @@ pageDataApp.get("/partido/:id", async (c) => {
         }
       : null;
 
+  const groupMembers =
+    player && row.groupId
+      ? (await getGroupMembers(row.groupId)).map((m) => ({
+          playerId: m.playerId,
+          name: m.name,
+        }))
+      : [];
+
   return c.json({
     notFound: false,
     match,
@@ -280,6 +289,7 @@ pageDataApp.get("/partido/:id", async (c) => {
     notes,
     matchGoals,
     player,
+    groupMembers,
   });
 });
 
@@ -434,13 +444,14 @@ pageDataApp.get("/group/:groupSlug/historial", async (c) => {
   const { group } = acc;
   const proStatus = getGroupProStatus(group);
   const proActive = proStatus.isPro;
-  const [rows, recentMatches, topScorers, isAdmin] = await Promise.all([
+  const [rows, recentMatches, topScorers, isAdmin, championship] = await Promise.all([
     getStandings(group.id),
     getRecentMatches(group.id, proActive ? 30 : 10),
     getGroupTopScorers(group.id),
     isGroupAdmin(group.id),
+    getChampionshipInfo(group.id, group),
   ]);
-  return c.json({ group, proStatus, rows, recentMatches, topScorers, isAdmin });
+  return c.json({ group, proStatus, rows, recentMatches, topScorers, isAdmin, championship });
 });
 
 pageDataApp.get("/group/:groupSlug/historial/:id", async (c) => {
@@ -455,12 +466,18 @@ pageDataApp.get("/group/:groupSlug/historial/:id", async (c) => {
   const match = await getMatchDetails(matchId);
   if (!match) return c.json({ notFound: true }, 404);
 
-  const [notes, votes, matchGoals, isAdmin] = await Promise.all([
+  const [notes, votes, matchGoals, isAdmin, membersRaw] = await Promise.all([
     getMatchNotes(matchId),
     getMatchVotes(matchId),
     getMatchGoals(matchId),
     isGroupAdmin(group.id),
+    getGroupMembers(group.id),
   ]);
+
+  const groupMembers = membersRaw.map((m) => ({
+    playerId: m.playerId,
+    name: m.name,
+  }));
 
   return c.json({
     group,
@@ -470,6 +487,7 @@ pageDataApp.get("/group/:groupSlug/historial/:id", async (c) => {
     matchGoals,
     player,
     isAdmin,
+    groupMembers,
   });
 });
 

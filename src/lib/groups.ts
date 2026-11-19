@@ -115,7 +115,7 @@ export const getGroupBySlug = cache(async (slug: string): Promise<Group | null> 
   } catch (err: any) {
     console.warn("[getGroupBySlug] Query failed, ensuring schema and retrying:", err?.message || err);
     const { ensureAdminNotifyPreferenceColumn } = await import("./db-migrations");
-    await ensureAdminNotifyPreferenceColumn();
+    await ensureAdminNotifyPreferenceColumn(true);
     const rows = await db.select().from(groups).where(eq(groups.slug, slug)).limit(1);
     return rows[0] ?? null;
   }
@@ -123,16 +123,26 @@ export const getGroupBySlug = cache(async (slug: string): Promise<Group | null> 
 
 /** Busca un grupo por código de invitación. */
 export async function getGroupByInviteCode(code: string): Promise<Group | null> {
-  const { ensureAdminNotifyPreferenceColumn } = await import("./db-migrations");
-  await ensureAdminNotifyPreferenceColumn();
   const cleanCode = (code || "").trim().toUpperCase();
   if (!cleanCode) return null;
-  const rows = await db
-    .select()
-    .from(groups)
-    .where(sql`upper(trim(${groups.inviteCode})) = ${cleanCode}`)
-    .limit(1);
-  return rows[0] ?? null;
+  try {
+    const rows = await db
+      .select()
+      .from(groups)
+      .where(sql`upper(trim(${groups.inviteCode})) = ${cleanCode}`)
+      .limit(1);
+    return rows[0] ?? null;
+  } catch (err: any) {
+    console.warn("[getGroupByInviteCode] Query failed, ensuring schema and retrying:", err?.message || err);
+    const { ensureAdminNotifyPreferenceColumn } = await import("./db-migrations");
+    await ensureAdminNotifyPreferenceColumn(true);
+    const rows = await db
+      .select()
+      .from(groups)
+      .where(sql`upper(trim(${groups.inviteCode})) = ${cleanCode}`)
+      .limit(1);
+    return rows[0] ?? null;
+  }
 }
 
 /** Devuelve los miembros activos de un grupo con sus datos de jugador. */

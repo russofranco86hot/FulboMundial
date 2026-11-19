@@ -4,7 +4,8 @@ import { artWallTimeToUtc, ART_TZ, formatArt } from "./time";
 import { toZonedTime } from "date-fns-tz";
 import { getActiveSignups } from "./queries";
 import { computeSelection } from "./selection";
-import { pushToAll, pushToPlayer } from "./push";
+import { pushToAll, pushToGroupMembers, pushToPlayer } from "./push";
+import { isLastChampionshipMatch } from "./championship";
 
 /**
  * Calcula la ventana de inscripción para un partido.
@@ -92,12 +93,59 @@ export async function openNextMatch(opts: {
 
   if (opts.notify !== false) {
     const dateStr = formatArt(matchDate, "EEEE dd/MM 'a las' HH:mm");
-    await pushToAll({
-      title: "¡Se abrió la lista! ⚽",
-      body: `Anotate para el ${dateStr}.`,
-      url: "/",
-      tag: "lista-abierta",
-    });
+    let groupMeta: {
+      name: string;
+      slug: string;
+      championshipEndDate: string | null;
+      defaultDayOfWeek: number | null;
+    } | null = null;
+    if (targetGroupId) {
+      try {
+        const { groups } = await import("@/db/schema");
+        groupMeta =
+          (
+            await db
+              .select({
+                name: groups.name,
+                slug: groups.slug,
+                championshipEndDate: groups.championshipEndDate,
+                defaultDayOfWeek: groups.defaultDayOfWeek,
+              })
+              .from(groups)
+              .where(eq(groups.id, targetGroupId))
+              .limit(1)
+          )[0] ?? null;
+      } catch (err) {
+        console.warn("[openNextMatch] No se pudo leer metadata del campeonato:", err);
+      }
+    }
+
+    const isLast = isLastChampionshipMatch(
+      matchDate,
+      groupMeta?.championshipEndDate,
+      groupMeta?.defaultDayOfWeek
+    );
+    const targetUrl = groupMeta?.slug ? `/grupos/${groupMeta.slug}` : "/";
+
+    if (targetGroupId) {
+      await pushToGroupMembers(targetGroupId, {
+        title: isLast
+          ? "🏆 ¡ÚLTIMA FECHA DEL CAMPEONATO! Se abrió la lista ⚽"
+          : "¡Se abrió la lista! ⚽",
+        body: isLast
+          ? `Es el último partido del campeonato en ${groupMeta?.name || "el grupo"} (${dateStr}). ¡No te quedes afuera del cierre!`
+          : `Anotate para el ${dateStr}.`,
+        url: targetUrl,
+        tag: "lista-abierta",
+      });
+    } else {
+      await pushToAll({
+        title: "¡Se abrió la lista! ⚽",
+        body: `Anotate para el ${dateStr}.`,
+        url: "/",
+        tag: "lista-abierta",
+      });
+    }
   }
   return match;
 }

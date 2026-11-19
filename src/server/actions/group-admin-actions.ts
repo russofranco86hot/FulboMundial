@@ -17,6 +17,11 @@ import { savePlayerComment, regenerateAllGroupComments } from "@/lib/player-comm
 import { saveMatchPaymentConfig, adminTogglePlayerPaid } from "@/lib/payments";
 import { saveMatchGoals } from "@/lib/goals";
 import { adminResetPlayerPassword } from "@/lib/auth-credentials";
+import { ensureAdminNotifyPreferenceColumn } from "@/lib/db-migrations";
+import {
+  generateChampionshipSummary,
+  isLastChampionshipMatch,
+} from "@/lib/championship";
 
 function refreshGroup(groupSlug: string) {
   revalidatePath(`/grupos/${groupSlug}`);
@@ -606,14 +611,14 @@ export async function adminGroupSaveResult(formData: FormData) {
   const wasAlreadyFinished = match.status === "finished";
   await db.update(matches).set({ status: "finished" }).where(eq(matches.id, match.id));
 
-  if (!wasAlreadyFinished) {
-    const { groups } = await import("@/db/schema");
-    const groupRow = (
-      await db.select().from(groups).where(eq(groups.id, groupId)).limit(1)
-    )[0];
-    const teamAName = match.teamAName || groupRow?.teamAName || "Claro";
-    const teamBName = match.teamBName || groupRow?.teamBName || "Oscuro";
+  const { groups } = await import("@/db/schema");
+  const groupRow = (
+    await db.select().from(groups).where(eq(groups.id, groupId)).limit(1)
+  )[0];
+  const teamAName = match.teamAName || groupRow?.teamAName || "Claro";
+  const teamBName = match.teamBName || groupRow?.teamBName || "Oscuro";
 
+  if (!wasAlreadyFinished) {
     await notifyMatchCompletionAndAchievements({
       matchId: match.id,
       groupId,
@@ -654,6 +659,29 @@ export async function adminGroupSaveResult(formData: FormData) {
     console.error("Error regenerating player comments after match:", err);
   }
 
+  // Si este partido cierra el campeonato, generar el resumen oficial en base a notas y votaciones
+  if (
+    isLastChampionshipMatch(
+      match.matchDate,
+      groupRow?.championshipEndDate,
+      groupRow?.defaultDayOfWeek
+    )
+  ) {
+    try {
+      await generateChampionshipSummary(groupId);
+      if (!wasAlreadyFinished || !groupRow?.championshipSummary) {
+        await pushToGroupMembers(groupId, {
+          title: `🏆 ¡Finalizó el campeonato en ${groupRow?.name || "el grupo"}!`,
+          body: "Se cerró el último partido del torneo. ¡Ya está disponible el resumen oficial con notas y premios en el Historial!",
+          url: `/grupos/${groupSlug}/historial`,
+          tag: `championship-end-${groupId}-${match.id}`,
+        });
+      }
+    } catch (err) {
+      console.error("Error generating championship summary on final match:", err);
+    }
+  }
+
   refreshGroup(groupSlug);
   redirect(`/grupos/${groupSlug}/admin/resultado?saved=1&matchId=${match.id}`);
 }
@@ -680,23 +708,51 @@ export async function adminGroupSaveSettings(formData: FormData) {
   const teamAName = String(formData.get("teamAName") || "Claro").trim();
   const teamBName = String(formData.get("teamBName") || "Oscuro").trim();
   const adminNotifyPreference = String(formData.get("adminNotifyPreference") || "both").trim();
+  const rawChampionshipEndDate = String(formData.get("championshipEndDate") || "").trim();
+  const championshipEndDate = rawChampionshipEndDate || null;
 
-  await db
-    .update(groups)
-    .set({
-      ...(name ? { name } : {}),
-      format,
-      defaultCapacity,
-      defaultDayOfWeek,
-      defaultTime,
-      ptsWin,
-      ptsDraw,
-      ptsLoss,
-      teamAName,
-      teamBName,
-      adminNotifyPreference,
-    })
-    .where(eq(groups.id, groupId));
+  const updatePayload = {
+    ...(name ? { name } : {}),
+    format,
+    defaultCapacity,
+    defaultDayOfWeek,
+    defaultTime,
+    ptsWin,
+    ptsDraw,
+    ptsLoss,
+    teamAName,
+    teamBName,
+    adminNotifyPreference,
+    championshipEndDate,
+  };
+
+  try {
+    await db.update(groups).set(updatePayload).where(eq(groups.id, groupId));
+  } catch (err) {
+    console.warn("[adminGroupSaveSettings] Retrying update after ensuring schema:", err);
+    await ensureAdminNotifyPreferenceColumn(true);
+    await db.update(groups).set(updatePayload).where(eq(groups.id, groupId));
+  }
+
+  if (championshipEndDate) {
+    try {
+      const activeMatch = await getCurrentMatch(groupId);
+      if (
+        activeMatch &&
+        activeMatch.status !== "finished" &&
+        isLastChampionshipMatch(activeMatch.matchDate, championshipEndDate, defaultDayOfWeek)
+      ) {
+        await pushToGroupMembers(groupId, {
+          title: `🏆 ¡Última fecha del campeonato en ${name || groupSlug}!`,
+          body: `El partido del ${formatArt(activeMatch.matchDate, "EEEE dd/MM")} es el último del torneo antes del cierre. ¡Anotate!`,
+          url: `/grupos/${groupSlug}`,
+          tag: `championship-last-${groupId}-${activeMatch.id}`,
+        });
+      }
+    } catch (err) {
+      console.warn("[adminGroupSaveSettings] Error notifying last championship match:", err);
+    }
+  }
 
   refreshGroup(groupSlug);
   redirect(`/grupos/${groupSlug}/admin/configuracion?saved=1`);
@@ -982,6 +1038,16 @@ export async function adminGroupSaveMatchGoals(formData: FormData) {
   }
 
   await saveMatchGoals(matchId, entries);
+  refreshGroup(groupSlug);
+}
+
+export async function adminGroupGenerateChampionshipSummary(formData: FormData) {
+  const groupId = Number(formData.get("groupId"));
+  const groupSlug = String(formData.get("groupSlug"));
+  await requireGroupAdmin(groupId);
+  if (!groupId) return;
+
+  await generateChampionshipSummary(groupId);
   refreshGroup(groupSlug);
 }
 
