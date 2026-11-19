@@ -1,10 +1,9 @@
-import { redirect } from "next/navigation";
+import { LegacyHistorialRedirect } from "./redirect-client";
 
-export default async function LegacyHistorialDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  redirect(`/grupos/futbol-miercoles/historial/${id}`);
+export function generateStaticParams() {
+  return [{ id: "_" }];
+}
+
+export default function LegacyMatchDetailPage() {
+  return <LegacyHistorialRedirect />;
 }

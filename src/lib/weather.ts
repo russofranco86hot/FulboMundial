@@ -1,4 +1,3 @@
-import "server-only";
 
 export type WeatherInfo = {
   temp: number;

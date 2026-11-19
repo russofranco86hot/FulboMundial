@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/client-api";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -47,7 +48,7 @@ export function PushManager() {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapid),
       });
-      await fetch("/api/push/subscribe", {
+      await apiFetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subscription: sub }),

@@ -37,10 +37,8 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
-export const dynamic = "force-dynamic";
-
-// Layout principal de la aplicación
-export default async function RootLayout({
+// Layout principal de la aplicación (estático)
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;

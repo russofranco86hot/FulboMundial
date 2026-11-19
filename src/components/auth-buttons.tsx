@@ -1,8 +1,8 @@
 "use client";
 
-import { signIn, signOut } from "next-auth/react";
 import { LogIn, LogOut } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { API_BASE, apiFetch, setAuthToken, triggerDataRefresh } from "@/lib/client-api";
 
 export function GoogleSignInButton({
   callbackUrl = "/grupos",
@@ -21,7 +21,9 @@ export function GoogleSignInButton({
       disabled={loading}
       onClick={() => {
         setLoading(true);
-        signIn("google", { callbackUrl });
+        window.location.assign(
+          `${API_BASE}/api/auth/google?callbackUrl=${encodeURIComponent(callbackUrl)}`
+        );
       }}
       className={className}
     >
@@ -52,9 +54,16 @@ export function SignOutButton({
     <button
       type="button"
       disabled={loading}
-      onClick={() => {
+      onClick={async () => {
         setLoading(true);
-        signOut({ callbackUrl });
+        try {
+          await apiFetch("/api/auth/logout", { method: "POST" });
+        } catch {
+          // ignore
+        }
+        setAuthToken(null);
+        triggerDataRefresh();
+        window.location.assign(callbackUrl);
       }}
       className={
         className ??

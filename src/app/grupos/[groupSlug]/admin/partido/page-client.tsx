@@ -1,0 +1,892 @@
+"use client";
+
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import {
+  MessageCircle,
+  Shuffle,
+  Users,
+  Wallet,
+  CheckCircle2,
+  Edit3,
+  Trash2,
+  Trophy,
+  ArrowRight,
+  Bell,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
+} from "lucide-react";
+import { formatArt, nextGroupMatchDate } from "@/lib/time";
+import { waListMessage, waTeamsMessage } from "@/lib/whatsapp";
+import {
+  adminOpenGroupMatch,
+  adminGroupToggleSignup,
+  adminGroupGenerateTeams,
+  adminGroupAddGuest,
+  adminGroupAddPlayerToTeam,
+  adminGroupPushTeams,
+  adminGroupSavePaymentConfig,
+  adminGroupTogglePlayerPaid,
+  adminGroupUpdateMatch,
+  adminGroupClearTeams,
+  adminGroupDeleteMatch,
+  adminGroupFinishMatchWithoutResult,
+  adminSendPreMatch24hReminder,
+  adminGroupReorderSignup,
+  adminGroupMoveToSubstitute,
+  adminGroupMoveToPlaying,
+  adminGroupResetSignupsOrder,
+} from "../actions";
+import { TeamEditor, type TeamRow } from "@/components/team-editor";
+import { WhatsAppShare } from "@/components/whatsapp-share";
+import { useApiData, useRouteParams } from "@/lib/client-api";
+
+type AdminPartidoData = {
+  allowed: boolean;
+  group?: {
+    id: number;
+    name: string;
+    slug: string;
+    format: string;
+    defaultCapacity: number;
+    defaultDayOfWeek: number | null;
+    defaultTime: string | null;
+    teamAName: string | null;
+    teamBName: string | null;
+  };
+  allGroupMatches?: {
+    id: number;
+    matchDate: string | Date;
+    status: string;
+    format: string;
+    capacity: number;
+  }[];
+  match?: {
+    id: number;
+    matchDate: string | Date;
+    status: string;
+    format: string;
+    capacity: number;
+    teamAName: string | null;
+    teamBName: string | null;
+  } | null;
+  selection?: {
+    playerId: number;
+    name: string;
+    phone?: string | null;
+    status: "playing" | "substitute";
+    substituteIndex: number | null;
+    manualOrder?: number | null;
+    isGoalkeeper?: boolean;
+  }[];
+  teamRows?: {
+    id: number;
+    playerId: number | null;
+    name: string;
+    stars: number;
+    isGoalkeeper: boolean;
+    isGuest: boolean;
+    team: string;
+    preferredPosition: string | null;
+    preferredFoot: string | null;
+  }[];
+  players?: {
+    id: number;
+    name: string;
+    stars: number;
+    isGoalkeeper: boolean;
+    preferredPosition: string | null;
+  }[];
+  paymentConfig?: { totalPrice: number; paymentAlias: string | null; notes: string | null } | null;
+  playerPaymentsList?: { playerId: number; paid: boolean; notified: boolean }[];
+  appUrl?: string;
+};
+
+function GroupAdminPartidoContent() {
+  const { groupSlug } = useRouteParams();
+  const searchParams = useSearchParams();
+  const matchIdParam = searchParams.get("matchId");
+  const saved = searchParams.get("saved");
+  const opened = searchParams.get("opened");
+  const reminded24h = searchParams.get("reminded24h");
+
+  const qs = matchIdParam ? `?matchId=${encodeURIComponent(matchIdParam)}` : "";
+  const { data, loading } = useApiData<AdminPartidoData>(
+    groupSlug ? `/api/page-data/group/${encodeURIComponent(groupSlug)}/admin/partido${qs}` : null
+  );
+
+  if (!groupSlug || (loading && !data) || !data?.allowed || !data.group) {
+    return <div className="pt-8 text-center text-sm text-zinc-500">Cargando partido...</div>;
+  }
+
+  const {
+    group,
+    allGroupMatches = [],
+    match = null,
+    selection = [],
+    teamRows = [],
+    players = [],
+    paymentConfig = null,
+    playerPaymentsList = [],
+    appUrl,
+  } = data;
+
+  if (!match) {
+    const nextDate = nextGroupMatchDate(group.defaultDayOfWeek, group.defaultTime ?? "21:00");
+    const defaultDateStr = formatArt(nextDate, "yyyy-MM-dd'T'HH:mm");
+
+    return (
+      <div className="card space-y-4 text-center py-8 animate-fade-in">
+        <div className="w-16 h-16 bg-pitch-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-2">
+          <span className="text-2xl">📅</span>
+        </div>
+        <p className="text-pitch-900/60 dark:text-zinc-400 font-medium">No hay partido activo en {group.name}.</p>
+        <form action={adminOpenGroupMatch} className="space-y-3 max-w-sm mx-auto text-left">
+          <input type="hidden" name="groupId" value={group.id} />
+          <input type="hidden" name="groupSlug" value={group.slug} />
+
+          <div>
+            <label className="block text-xs font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">
+              Fecha y hora
+            </label>
+            <input type="datetime-local" name="matchDate" defaultValue={defaultDateStr} className="input w-full" required />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Formato</label>
+              <select name="format" className="input w-full" defaultValue={group.format}>
+                <option value="F5">Fútbol 5</option>
+                <option value="F6">Fútbol 6</option>
+                <option value="F7">Fútbol 7</option>
+                <option value="F8">Fútbol 8</option>
+                <option value="F11">Fútbol 11</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Capacidad</label>
+              <input type="number" name="capacity" defaultValue={group.defaultCapacity} min={4} max={30} className="input w-full" />
+            </div>
+          </div>
+
+          <button className="btn-primary w-full shadow-glow-green">Abrir nuevo partido</button>
+        </form>
+      </div>
+    );
+  }
+
+  const signedIds = new Set(selection.map((s) => s.playerId));
+  const inTeamsIds = new Set(teamRows.map((r) => r.playerId).filter(Boolean) as number[]);
+  const editorRows: TeamRow[] = teamRows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    stars: r.stars,
+    isGoalkeeper: r.isGoalkeeper,
+    isGuest: r.isGuest,
+    team: r.team as "A" | "B",
+    preferredPosition: r.preferredPosition ?? undefined,
+    preferredFoot: r.preferredFoot ?? undefined,
+  }));
+  const teamsSig = editorRows.map((r) => `${r.id}:${r.team}`).join(",");
+
+  const teamAName = match.teamAName || group.teamAName || "Claro";
+  const teamBName = match.teamBName || group.teamBName || "Oscuro";
+  const listMsg = waListMessage(match.matchDate, selection, appUrl);
+  const teamAList = editorRows.filter((r) => r.team === "A");
+  const teamBList = editorRows.filter((r) => r.team === "B");
+  const teamsMsg = waTeamsMessage(match.matchDate, teamAList, teamBList, appUrl, teamAName, teamBName);
+
+  const titularesCount = selection.filter((s) => s.status === "playing").length;
+  const suplentesCount = selection.filter((s) => s.status === "substitute").length;
+  const playingPlayers = selection.filter((s) => s.status === "playing");
+
+  const paymentMap = new Map(playerPaymentsList.map((p) => [p.playerId, p]));
+
+  const nextDateAfterFinished = nextGroupMatchDate(
+    group.defaultDayOfWeek,
+    group.defaultTime ?? "21:00",
+    new Date(),
+    match.matchDate
+  );
+  const nextDefaultDateStr = formatArt(nextDateAfterFinished, "yyyy-MM-dd'T'HH:mm");
+
+  return (
+    <div className="space-y-5 animate-fade-in">
+      {saved === "1" && (
+        <div className="rounded-2xl bg-green-500/15 p-4 text-sm font-semibold text-green-800 dark:text-green-300 border border-green-500/30 flex items-center gap-3 shadow-glow-green">
+          <CheckCircle2 className="text-green-600 dark:text-green-400 shrink-0" size={24} />
+          <span>¡Cambios del partido guardados correctamente! Fecha, horario y cupo actualizados.</span>
+        </div>
+      )}
+      {opened === "1" && (
+        <div className="rounded-2xl bg-green-500/15 p-4 text-sm font-semibold text-green-800 dark:text-green-300 border border-green-500/30 flex items-center gap-3 shadow-glow-green">
+          <CheckCircle2 className="text-green-600 dark:text-green-400 shrink-0" size={24} />
+          <span>¡Nuevo partido abierto con éxito! La lista de inscripción ya está disponible.</span>
+        </div>
+      )}
+      {reminded24h === "1" && (
+        <div className="rounded-2xl bg-emerald-500/15 p-4 text-sm font-semibold text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-3 shadow-glow-green">
+          <Bell className="text-emerald-600 dark:text-emerald-400 shrink-0" size={24} />
+          <span>¡Recordatorio Pre-Partido (24hs) enviado por notificación Push a todos los miembros del grupo!</span>
+        </div>
+      )}
+
+      {allGroupMatches.length > 0 && (
+        <div className="card space-y-2 py-3 bg-zinc-50/80 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-pitch-900/70 dark:text-zinc-300 flex items-center gap-1.5">
+              📅 Administrar partido:
+            </span>
+            <Link
+              href={`/grupos/${groupSlug}/admin/partido`}
+              className="text-[11px] text-pitch-600 dark:text-pitch-400 font-semibold hover:underline"
+            >
+              Ir al partido actual
+            </Link>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {allGroupMatches.map((m) => {
+              const isSelected = m.id === match?.id;
+              return (
+                <Link
+                  key={m.id}
+                  href={`/grupos/${groupSlug}/admin/partido?matchId=${m.id}`}
+                  className={`chip whitespace-nowrap text-xs py-1.5 px-3 rounded-xl font-bold transition-all border ${
+                    isSelected
+                      ? "bg-pitch-600 text-white border-pitch-700 shadow-sm"
+                      : "bg-white text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-pitch-400"
+                  }`}
+                >
+                  {formatArt(m.matchDate, "dd/MM")} ({m.status === "finished" ? "Finalizado" : m.status === "closed" ? "Cerrado" : "Abierto"})
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {match.status === "finished" && (
+        <div className="card space-y-3 bg-amber-500/10 border border-amber-500/20 shadow-none">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+              ⚠️ Este partido del {formatArt(match.matchDate, "dd/MM")} ya se encuentra finalizado.
+            </p>
+            <Link
+              href={`/grupos/${groupSlug}/admin/resultado?matchId=${match.id}`}
+              className="btn-primary py-1.5 px-3 text-xs font-bold flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white border-none shadow-sm"
+            >
+              <Trophy size={14} /> Editar resultado / crónica <ArrowRight size={14} />
+            </Link>
+          </div>
+
+          <form action={adminOpenGroupMatch} className="space-y-3 pt-2 border-t border-amber-500/20">
+            <input type="hidden" name="groupId" value={group.id} />
+            <input type="hidden" name="groupSlug" value={group.slug} />
+            <div className="grid grid-cols-2 gap-2 text-left">
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-amber-900 dark:text-amber-200">
+                  Fecha y hora para el próximo partido
+                </label>
+                <input type="datetime-local" name="matchDate" defaultValue={nextDefaultDateStr} className="input w-full" required />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1 text-amber-900 dark:text-amber-200">Formato</label>
+                <select name="format" className="input w-full" defaultValue={group.format}>
+                  <option value="F5">F5</option>
+                  <option value="F6">F6</option>
+                  <option value="F7">F7</option>
+                  <option value="F8">F8</option>
+                  <option value="F11">F11</option>
+                </select>
+              </div>
+            </div>
+            <button className="btn-primary w-full text-sm">
+              ➕ Abrir inscripción para el próximo partido ({formatArt(nextDateAfterFinished, "dd/MM HH:mm")})
+            </button>
+          </form>
+        </div>
+      )}
+
+      <div className="card bg-gradient-to-br from-pitch-600 to-pitch-800 text-white shadow-glow-green border-none">
+        <p className="capitalize font-extrabold text-lg flex items-center gap-2">
+          {formatArt(match.matchDate, "EEEE dd/MM HH:mm")}
+        </p>
+        <div className="flex gap-2 mt-3 text-sm flex-wrap">
+          <span className="bg-white/20 px-3 py-1 rounded-full font-medium shadow-sm backdrop-blur-sm">
+            Estado: {match.status === "finished" ? "Finalizado" : match.status === "closed" ? "Cerrado" : "Abierto"}
+          </span>
+          <span className="bg-white/20 px-3 py-1 rounded-full font-medium shadow-sm backdrop-blur-sm">
+            {match.format} ({match.capacity} cupo)
+          </span>
+          <span className="bg-white/20 px-3 py-1 rounded-full font-medium shadow-sm flex items-center gap-1 backdrop-blur-sm">
+            <Users size={14} /> {titularesCount} titulares
+          </span>
+        </div>
+      </div>
+
+      <details className="card text-xs" open={true}>
+        <summary className="font-bold cursor-pointer text-pitch-800 dark:text-zinc-200 flex items-center gap-1.5">
+          <Edit3 size={15} className="text-pitch-600" /> Modificar fecha, horario o cupo de este partido
+        </summary>
+        <form key={`edit-match-${match.id}`} action={adminGroupUpdateMatch} className="mt-3 space-y-3">
+          <input type="hidden" name="groupId" value={group.id} />
+          <input type="hidden" name="groupSlug" value={group.slug} />
+          <input type="hidden" name="matchId" value={match.id} />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <label className="block font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Fecha y hora (ART)</label>
+              <input
+                type="datetime-local"
+                name="matchDate"
+                defaultValue={formatArt(match.matchDate, "yyyy-MM-dd'T'HH:mm")}
+                className="input w-full"
+                required
+              />
+            </div>
+            <div>
+              <label className="block font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Formato</label>
+              <select name="format" defaultValue={match.format} className="input w-full">
+                <option value="F5">F5</option>
+                <option value="F6">F6</option>
+                <option value="F7">F7</option>
+                <option value="F8">F8</option>
+                <option value="F11">F11</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Capacidad</label>
+              <input type="number" name="capacity" defaultValue={match.capacity} min={4} max={30} className="input w-full" required />
+            </div>
+            <div>
+              <label className="block font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Nombre Equipo A</label>
+              <input
+                type="text"
+                name="teamAName"
+                defaultValue={match.teamAName ?? group.teamAName ?? "Claro"}
+                placeholder="Ej: Pechera, Blancas..."
+                className="input w-full"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold mb-1 text-pitch-900/70 dark:text-zinc-300">Nombre Equipo B</label>
+              <input
+                type="text"
+                name="teamBName"
+                defaultValue={match.teamBName ?? group.teamBName ?? "Oscuro"}
+                placeholder="Ej: Sin pechera, Negras..."
+                className="input w-full"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between pt-3 border-t border-zinc-200 dark:border-zinc-700 flex-wrap gap-2">
+            <button type="submit" className="btn-primary py-2 px-4 text-xs font-bold shadow-sm">
+              Guardar cambios del partido
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                formAction={adminGroupFinishMatchWithoutResult}
+                className="btn-ghost py-2 px-3 text-xs font-bold text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40 border-amber-300 dark:border-amber-800"
+                title="Cierra este partido sin computar resultado para pasar al siguiente"
+              >
+                🏁 Finalizar sin jugar
+              </button>
+              <button
+                type="submit"
+                formAction={adminGroupDeleteMatch}
+                className="btn-ghost py-2 px-3 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200 dark:border-red-900/40"
+                title="Elimina este partido completamente"
+              >
+                🗑️ Eliminar partido
+              </button>
+            </div>
+          </div>
+        </form>
+      </details>
+
+      <div className="card">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div>
+            <h3 className="font-bold text-pitch-800 dark:text-pitch-100 flex items-center gap-2">
+              Lista ({selection.length} anotados)
+            </h3>
+            <p className="text-[11px] text-pitch-900/60 dark:text-zinc-400">
+              {selection.some((s) => s.manualOrder !== null && s.manualOrder !== undefined)
+                ? "⚡ Orden manual activo asignado por el admin."
+                : "⏱️ Orden automático por llegada (hora de inscripción)."}
+            </p>
+          </div>
+          {selection.some((s) => s.manualOrder !== null && s.manualOrder !== undefined) && (
+            <form action={adminGroupResetSignupsOrder}>
+              <input type="hidden" name="groupId" value={group.id} />
+              <input type="hidden" name="groupSlug" value={group.slug} />
+              <input type="hidden" name="matchId" value={match.id} />
+              <button
+                type="submit"
+                className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-pitch-600 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
+                title="Restablece el orden al orden de llegada original de inscripción"
+              >
+                <RotateCcw size={12} /> Restablecer a orden de llegada
+              </button>
+            </form>
+          )}
+        </div>
+
+        <ul className="space-y-1.5 text-sm">
+          {selection.map((s, i) => {
+            const isFirstSuplente = s.status === "substitute" && i > 0 && selection[i - 1].status === "playing";
+
+            return (
+              <li key={s.playerId}>
+                {isFirstSuplente && (
+                  <div className="flex items-center gap-4 my-4">
+                    <div className="h-px bg-pitch-200 dark:bg-zinc-700 flex-1"></div>
+                    <span className="text-xs font-bold text-pitch-400 uppercase tracking-wider">
+                      Suplentes ({suplentesCount})
+                    </span>
+                    <div className="h-px bg-pitch-200 dark:bg-zinc-700 flex-1"></div>
+                  </div>
+                )}
+
+                <div
+                  className={`flex items-center gap-2.5 p-2 rounded-xl transition-colors ${
+                    s.status === "playing" ? "bg-pitch-50/50 dark:bg-zinc-800/50" : "bg-amber-50/50 dark:bg-amber-900/10"
+                  } hover:bg-pitch-100/70 dark:hover:bg-zinc-800`}
+                >
+                  <span
+                    className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shadow-sm shrink-0 ${
+                      s.status === "playing"
+                        ? "bg-gradient-to-br from-pitch-500 to-pitch-700 text-white"
+                        : "bg-gradient-to-br from-amber-400 to-amber-600 text-white"
+                    }`}
+                  >
+                    {s.status === "playing" ? i + 1 : `S${s.substituteIndex}`}
+                  </span>
+
+                  <span className="flex-1 font-medium text-zinc-800 dark:text-zinc-200 truncate">{s.name}</span>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center bg-white dark:bg-zinc-700 rounded-lg border border-zinc-200 dark:border-zinc-600 overflow-hidden shadow-2xs">
+                      <form action={adminGroupReorderSignup}>
+                        <input type="hidden" name="groupId" value={group.id} />
+                        <input type="hidden" name="groupSlug" value={group.slug} />
+                        <input type="hidden" name="matchId" value={match.id} />
+                        <input type="hidden" name="playerId" value={s.playerId} />
+                        <input type="hidden" name="direction" value="up" />
+                        <button
+                          type="submit"
+                          disabled={i === 0}
+                          className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-600 disabled:opacity-25 disabled:hover:bg-transparent text-zinc-700 dark:text-zinc-300 transition-colors"
+                          title="Subir posición"
+                        >
+                          <ArrowUp size={13} />
+                        </button>
+                      </form>
+                      <div className="w-px h-3 bg-zinc-200 dark:bg-zinc-600" />
+                      <form action={adminGroupReorderSignup}>
+                        <input type="hidden" name="groupId" value={group.id} />
+                        <input type="hidden" name="groupSlug" value={group.slug} />
+                        <input type="hidden" name="matchId" value={match.id} />
+                        <input type="hidden" name="playerId" value={s.playerId} />
+                        <input type="hidden" name="direction" value="down" />
+                        <button
+                          type="submit"
+                          disabled={i === selection.length - 1}
+                          className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-600 disabled:opacity-25 disabled:hover:bg-transparent text-zinc-700 dark:text-zinc-300 transition-colors"
+                          title="Bajar posición"
+                        >
+                          <ArrowDown size={13} />
+                        </button>
+                      </form>
+                    </div>
+
+                    {s.status === "playing" && suplentesCount > 0 && (
+                      <form action={adminGroupMoveToSubstitute}>
+                        <input type="hidden" name="groupId" value={group.id} />
+                        <input type="hidden" name="groupSlug" value={group.slug} />
+                        <input type="hidden" name="matchId" value={match.id} />
+                        <input type="hidden" name="playerId" value={s.playerId} />
+                        <button
+                          type="submit"
+                          className="text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 px-2 py-1 rounded-lg border border-amber-300/70 dark:border-amber-800/70 transition-colors whitespace-nowrap"
+                          title="Pasa este titular a suplente (el primer suplente pasará a titular)"
+                        >
+                          A Suplente
+                        </button>
+                      </form>
+                    )}
+
+                    {s.status === "substitute" && (
+                      <form action={adminGroupMoveToPlaying}>
+                        <input type="hidden" name="groupId" value={group.id} />
+                        <input type="hidden" name="groupSlug" value={group.slug} />
+                        <input type="hidden" name="matchId" value={match.id} />
+                        <input type="hidden" name="playerId" value={s.playerId} />
+                        <button
+                          type="submit"
+                          className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 px-2 py-1 rounded-lg border border-emerald-300/70 dark:border-emerald-800/70 transition-colors whitespace-nowrap"
+                          title="Pasa este suplente a titular (el último titular pasará a suplente)"
+                        >
+                          A Titular
+                        </button>
+                      </form>
+                    )}
+
+                    {s.phone && (
+                      <a
+                        href={`https://wa.me/${s.phone}?text=${encodeURIComponent(
+                          `¡Hola ${s.name}! Estás anotado para el partido de ${group.name}. Tu estado actual es: ${
+                            s.status === "playing" ? "Titular" : "Suplente"
+                          }.`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#25D366] hover:bg-[#25D366]/10 p-1.5 rounded-lg transition-colors flex items-center justify-center bg-white dark:bg-zinc-700 shadow-2xs"
+                        title="Notificar por WhatsApp"
+                      >
+                        <MessageCircle size={15} fill="currentColor" strokeWidth={0} />
+                      </a>
+                    )}
+
+                    <form action={adminGroupToggleSignup}>
+                      <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="groupSlug" value={group.slug} />
+                      <input type="hidden" name="matchId" value={match.id} />
+                      <input type="hidden" name="playerId" value={s.playerId} />
+                      <input type="hidden" name="action" value="remove" />
+                      <button
+                        type="submit"
+                        title="Quitar de la lista"
+                        className="text-xs font-bold text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 px-2 py-1 rounded-lg transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+          {selection.length === 0 && (
+            <li className="text-pitch-900/40 text-center py-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-700">
+              Nadie anotado.
+            </li>
+          )}
+        </ul>
+
+        <div className="mt-4 border-t border-pitch-100 dark:border-zinc-800 pt-4 space-y-3">
+          <WhatsAppShare text={listMsg} label="Enviar lista al grupo" />
+
+          {match.status !== "finished" && (
+            <div className="rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <p className="text-xs font-black text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                    <Bell size={14} /> Recordatorio Pre-Partido (24 horas antes)
+                  </p>
+                  <p className="text-[11px] text-amber-800/80 dark:text-amber-300/70">
+                    Pedí confirmación de asistencia para evitar que se baje uno a último momento.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <form action={adminSendPreMatch24hReminder}>
+                  <input type="hidden" name="groupId" value={group.id} />
+                  <input type="hidden" name="groupSlug" value={group.slug} />
+                  <input type="hidden" name="matchId" value={match.id} />
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-zinc-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+                  >
+                    <Bell size={14} /> Enviar Alerta Push 24hs
+                  </button>
+                </form>
+                <WhatsAppShare
+                  text={`⏰ *CONFIRMACIÓN DE ASISTENCIA (24HS ANTES) — ${group.name.toUpperCase()}*\n📅 Partido: ${formatArt(
+                    match.matchDate,
+                    "EEEE dd/MM 'a las' HH:mm"
+                  )}\n👥 Anotados: ${titularesCount}/${match.capacity} titulares${
+                    suplentesCount > 0 ? ` (+${suplentesCount} suplentes)` : ""
+                  }\n\n⚠️ *Por favor confirmen asistencia o avisen AHORA si alguno está en duda para que no falte uno a último momento:*\n👉 https://fulbomundial.com.ar/grupos/${group.slug}`}
+                  label="Alerta 24hs por WhatsApp"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <details className="card">
+        <summary className="cursor-pointer font-bold text-pitch-800 dark:text-pitch-100">
+          ➕ Anotar miembro manualmente
+        </summary>
+        <p className="mt-2 text-xs text-pitch-900/50 dark:text-zinc-400 bg-pitch-50 dark:bg-zinc-800 p-2 rounded-lg">
+          Anotá a cualquiera del grupo en su nombre. Funciona aunque la lista esté cerrada.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-sm max-h-[300px] overflow-y-auto pr-1">
+          {players
+            .filter((p) => !signedIds.has(p.id))
+            .map((p) => (
+              <form action={adminGroupToggleSignup} key={p.id}>
+                <input type="hidden" name="groupId" value={group.id} />
+                <input type="hidden" name="groupSlug" value={group.slug} />
+                <input type="hidden" name="playerId" value={p.id} />
+                <input type="hidden" name="action" value="add" />
+                <button className="btn-ghost w-full px-2 py-2 text-sm text-left truncate hover:border-pitch-400 hover:text-pitch-700 dark:hover:text-pitch-400">
+                  + {p.name}
+                </button>
+              </form>
+            ))}
+        </div>
+      </details>
+
+      <div className="card space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="font-bold text-pitch-800 dark:text-pitch-100">Equipos</h3>
+          <div className="flex items-center gap-2">
+            {editorRows.length > 0 && (
+              <form action={adminGroupClearTeams}>
+                <input type="hidden" name="groupId" value={group.id} />
+                <input type="hidden" name="groupSlug" value={group.slug} />
+                <input type="hidden" name="matchId" value={match.id} />
+                <button
+                  type="submit"
+                  className="btn-ghost px-3 py-2 text-xs font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-900/40 flex items-center gap-1.5"
+                  title="Quitar todos los jugadores de los equipos"
+                >
+                  <Trash2 size={14} /> Limpiar equipos
+                </button>
+              </form>
+            )}
+            <form action={adminGroupGenerateTeams}>
+              <input type="hidden" name="groupId" value={group.id} />
+              <input type="hidden" name="groupSlug" value={group.slug} />
+              <button className="btn-primary px-4 py-2 text-sm flex items-center gap-2 shadow-glow-green">
+                <Shuffle size={16} /> Generar equipos
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <TeamEditor key={teamsSig} rows={editorRows} groupSlug={group.slug} titleA={teamAName} titleB={teamBName} />
+
+        <details className="rounded-2xl bg-zinc-50 dark:bg-zinc-800/30 border border-zinc-200 dark:border-zinc-700 p-4">
+          <summary className="cursor-pointer text-sm font-bold text-zinc-700 dark:text-zinc-300">
+            ➕ Sumar del grupo a un equipo
+          </summary>
+          <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 mt-3">
+            {players.filter((p) => !inTeamsIds.has(p.id)).length === 0 && (
+              <p className="text-xs text-pitch-900/40 text-center py-2">Todos ya están en un equipo.</p>
+            )}
+            {players
+              .filter((p) => !inTeamsIds.has(p.id))
+              .map((p) => (
+                <div
+                  key={p.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700 p-3 text-sm shadow-sm hover:border-pitch-300 dark:hover:border-pitch-600 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-pitch-100 dark:bg-zinc-700 text-pitch-800 dark:text-pitch-200 flex items-center justify-center font-black text-xs shrink-0 shadow-2xs">
+                      {p.isGoalkeeper ? "🧤" : p.name.trim().charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <span className="font-extrabold text-sm text-zinc-900 dark:text-zinc-100 leading-snug break-words block">
+                        {p.name}
+                      </span>
+                      <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                        <span className="font-bold text-amber-600 dark:text-amber-400">⭐ {p.stars}</span>
+                        {p.preferredPosition && <span>• {p.preferredPosition}</span>}
+                        {p.isGoalkeeper && <span className="font-bold text-amber-600">• Arquero</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                    <form action={adminGroupAddPlayerToTeam}>
+                      <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="groupSlug" value={group.slug} />
+                      <input type="hidden" name="matchId" value={match.id} />
+                      <input type="hidden" name="playerId" value={p.id} />
+                      <input type="hidden" name="team" value="A" />
+                      <button className="rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 border border-emerald-300 dark:border-emerald-800 px-3 py-1.5 text-xs font-black text-emerald-800 dark:text-emerald-300 transition-colors shadow-2xs flex items-center gap-1">
+                        <span>→ {teamAName}</span>
+                      </button>
+                    </form>
+                    <form action={adminGroupAddPlayerToTeam}>
+                      <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="groupSlug" value={group.slug} />
+                      <input type="hidden" name="matchId" value={match.id} />
+                      <input type="hidden" name="playerId" value={p.id} />
+                      <input type="hidden" name="team" value="B" />
+                      <button className="rounded-xl bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/60 border border-cyan-300 dark:border-cyan-800 px-3 py-1.5 text-xs font-black text-cyan-800 dark:text-cyan-300 transition-colors shadow-2xs flex items-center gap-1">
+                        <span>→ {teamBName}</span>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </details>
+
+        <form action={adminGroupAddGuest} className="space-y-3 rounded-2xl bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-900/30 p-4">
+          <input type="hidden" name="groupId" value={group.id} />
+          <input type="hidden" name="groupSlug" value={group.slug} />
+          <input type="hidden" name="matchId" value={match.id} />
+          <p className="text-sm font-bold text-amber-800 dark:text-amber-400">👤 Agregar invitado manual</p>
+          <div className="flex gap-2">
+            <input name="name" placeholder="Nombre del invitado" className="input flex-1 py-2" required />
+            <div className="relative w-20 shrink-0">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs">⭐</span>
+              <input type="number" name="stars" step="0.5" min="0" max="5" defaultValue="3" className="input w-full pl-6 py-2 text-center" />
+            </div>
+            <select name="team" className="input w-28 py-2 shrink-0 bg-white dark:bg-zinc-800 font-medium text-xs">
+              <option value="A">{teamAName}</option>
+              <option value="B">{teamBName}</option>
+            </select>
+          </div>
+          <button className="btn-ghost w-full py-2 text-sm bg-white hover:bg-amber-50 border-amber-200 text-amber-700 dark:bg-zinc-800 dark:border-amber-900/50 dark:text-amber-400">
+            Agregar invitado
+          </button>
+        </form>
+
+        <form action={adminGroupPushTeams}>
+          <input type="hidden" name="groupId" value={group.id} />
+          <input type="hidden" name="groupSlug" value={group.slug} />
+          <button className="btn-primary w-full py-3 text-sm font-bold shadow-glow-green">
+            📣 Publicar equipos (push a todos)
+          </button>
+        </form>
+
+        <div className="border-t border-pitch-100 dark:border-zinc-800 pt-4 mt-2">
+          <WhatsAppShare text={teamsMsg} label="Enviar equipos al grupo" />
+        </div>
+      </div>
+
+      <div className="card space-y-4 border-emerald-500/30 bg-gradient-to-br from-pitch-50/30 via-white to-emerald-50/20 dark:from-zinc-900 dark:to-zinc-950">
+        <div className="flex items-center justify-between border-b border-pitch-100/60 dark:border-zinc-800 pb-2">
+          <div className="flex items-center gap-2">
+            <Wallet size={18} className="text-emerald-600 dark:text-emerald-400" />
+            <h3 className="font-bold text-pitch-800 dark:text-zinc-100">Pagos de la Cancha</h3>
+          </div>
+          {paymentConfig && paymentConfig.totalPrice > 0 && match.capacity > 0 && (
+            <span className="chip bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold px-2 py-0.5">
+              ${Math.round(paymentConfig.totalPrice / match.capacity).toLocaleString("es-AR")} c/u
+            </span>
+          )}
+        </div>
+
+        <form key={`pay-cfg-${match.id}`} action={adminGroupSavePaymentConfig} className="space-y-3">
+          <input type="hidden" name="groupId" value={group.id} />
+          <input type="hidden" name="groupSlug" value={group.slug} />
+          <input type="hidden" name="matchId" value={match.id} />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold mb-1 text-pitch-800 dark:text-zinc-200">
+                Precio total de la cancha ($)
+              </label>
+              <input
+                type="number"
+                name="totalPrice"
+                defaultValue={paymentConfig?.totalPrice ?? 0}
+                placeholder="Ej: 35000"
+                min={0}
+                className="input w-full py-1.5 px-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold mb-1 text-pitch-800 dark:text-zinc-200">
+                Alias o CBU para transferir
+              </label>
+              <input
+                name="paymentAlias"
+                defaultValue={paymentConfig?.paymentAlias ?? ""}
+                placeholder="Ej: cancha.futbol.miercoles"
+                className="input w-full py-1.5 px-3 text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold mb-1 text-pitch-900/60 dark:text-zinc-400">
+              Notas o instrucciones de pago (opcional)
+            </label>
+            <input
+              name="notes"
+              defaultValue={paymentConfig?.notes ?? ""}
+              placeholder="Ej: Transferir antes de las 18 hs / Enviar comprobante"
+              className="input w-full py-1.5 px-3 text-xs"
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <button type="submit" className="btn-primary text-xs py-1.5 px-4 font-bold shadow-sm">
+              Guardar configuración de pago
+            </button>
+          </div>
+        </form>
+
+        {playingPlayers.length > 0 && (
+          <div className="pt-3 border-t border-pitch-100/60 dark:border-zinc-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-pitch-800 dark:text-zinc-200">
+                Checklist de cobranza ({playerPaymentsList.filter((p) => p.paid).length} de {playingPlayers.length} pagaron)
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              {playingPlayers.map((p) => {
+                const payInfo = paymentMap.get(p.playerId);
+                const isPaid = !!payInfo?.paid;
+                const hasNotified = !!payInfo?.notified && !isPaid;
+
+                return (
+                  <div
+                    key={p.playerId}
+                    className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-800/80 border border-pitch-100/60 dark:border-zinc-700/60 text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-pitch-800 dark:text-zinc-200">{p.name}</span>
+                      {hasNotified && (
+                        <span className="chip bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[10px] font-bold px-1.5 py-0.5">
+                          ⏳ Avisó transferencia
+                        </span>
+                      )}
+                    </div>
+
+                    <form action={adminGroupTogglePlayerPaid}>
+                      <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="groupSlug" value={group.slug} />
+                      <input type="hidden" name="matchId" value={match.id} />
+                      <input type="hidden" name="playerId" value={p.playerId} />
+                      <input type="hidden" name="paid" value={isPaid ? "false" : "true"} />
+                      <button
+                        type="submit"
+                        className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-colors ${
+                          isPaid
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 hover:bg-emerald-200"
+                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 hover:bg-zinc-200"
+                        }`}
+                      >
+                        {isPaid ? "✅ Pagó" : "Pendiente"}
+                      </button>
+                    </form>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function GroupAdminPartidoClient() {
+  return (
+    <Suspense fallback={<div className="pt-8 text-center text-sm text-zinc-500">Cargando...</div>}>
+      <GroupAdminPartidoContent />
+    </Suspense>
+  );
+}

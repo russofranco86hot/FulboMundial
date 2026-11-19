@@ -1,38 +1,13 @@
-import "server-only";
-import { cache } from "react";
-import { cookies } from "next/headers";
-import { auth } from "@/auth";
+import { getRequestContext, requestCache as cache, type ContextUser } from "./request-context";
 import { db, players, groupMembers, groups, type Player, type Group } from "@/db";
 import { eq, or, and, sql } from "drizzle-orm";
 import { ensureDbUpgrades, ensureAdminNotifyPreferenceColumn } from "@/lib/db-migrations";
 
-export type SessionUser = {
-  name?: string | null;
-  email?: string | null;
-  image?: string | null;
-  googleId?: string;
-};
+export type SessionUser = ContextUser;
 
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
-  try {
-    const cookieStore = await cookies();
-    const hasSessionCookie =
-      cookieStore.has("__Secure-authjs.session-token") ||
-      cookieStore.has("authjs.session-token") ||
-      cookieStore.has("__Secure-next-auth.session-token") ||
-      cookieStore.has("next-auth.session-token");
-    if (!hasSessionCookie) return null;
-
-    const session = await auth();
-    if (!session?.user) return null;
-    return session.user as SessionUser;
-  } catch (err) {
-    if (err && typeof err === "object" && "digest" in err && err.digest === "DYNAMIC_SERVER_USAGE") {
-      throw err;
-    }
-    console.error("[getSessionUser] Error reading auth session:", err);
-    return null;
-  }
+  const ctx = getRequestContext();
+  return ctx?.user ?? null;
 });
 
 /**

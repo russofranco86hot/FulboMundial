@@ -1,10 +1,18 @@
-import Link from "next/link";
-import { getSessionUser, getCurrentPlayer } from "@/lib/session";
-import { User, LogIn } from "lucide-react";
+"use client";
 
-export async function UserHeader() {
-  const user = await getSessionUser();
-  const player = user ? await getCurrentPlayer() : null;
+import Link from "next/link";
+import { LogIn } from "lucide-react";
+import { useApiData } from "@/lib/client-api";
+
+type HeaderData = {
+  user: { name?: string | null; email?: string | null } | null;
+  player: { name?: string | null; isGoalkeeper?: boolean } | null;
+};
+
+export function UserHeader() {
+  const { data } = useApiData<HeaderData>("/api/page-data/header");
+  const user = data?.user ?? null;
+  const player = data?.player ?? null;
 
   if (!user) {
     return (
@@ -19,7 +27,11 @@ export async function UserHeader() {
     );
   }
 
-  const initial = player?.name ? player.name.trim().charAt(0).toUpperCase() : (user.name ? user.name.charAt(0).toUpperCase() : "U");
+  const initial = player?.name
+    ? player.name.trim().charAt(0).toUpperCase()
+    : user.name
+    ? user.name.charAt(0).toUpperCase()
+    : "U";
 
   return (
     <Link

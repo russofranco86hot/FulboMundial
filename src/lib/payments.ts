@@ -1,4 +1,3 @@
-import "server-only";
 import { db, matchPayments, playerPayments, players } from "@/db";
 import { eq, and, sql } from "drizzle-orm";
 import { ensureDbUpgrades } from "./db-migrations";

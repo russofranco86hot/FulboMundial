@@ -1,4 +1,3 @@
-import "server-only";
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 
@@ -8,9 +7,10 @@ let schemaUpgradesChecked = false;
 
 /**
  * Asegura que las columnas críticas añadidas recientemente existan en la tabla groups, players y matches.
- * Se corre una sola vez por instancia de forma idempotente.
+ * Solo corre si RUN_DB_MIGRATIONS="true" para evitar 4 consultas DDL en cada cold start del Worker.
  */
 export async function ensureAdminNotifyPreferenceColumn(): Promise<void> {
+  if (process.env.RUN_DB_MIGRATIONS !== "true") return;
   if (schemaUpgradesChecked) return;
   try {
     await db.execute(sql`

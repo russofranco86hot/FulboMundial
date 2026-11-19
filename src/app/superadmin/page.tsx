@@ -1,34 +1,48 @@
-import { redirect } from "next/navigation";
-import { isSuperAdmin, getSuperAdminDashboardData } from "@/lib/superadmin";
+"use client";
+
+import { Suspense, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { SuperAdminClient } from "./superadmin-client";
+import { useApiData } from "@/lib/client-api";
+import type { SuperAdminDashboardData } from "@/lib/superadmin";
 
-export const dynamic = "force-dynamic";
+function SuperAdminContent() {
+  const searchParams = useSearchParams();
+  const updated = searchParams.get("updated") ?? undefined;
+  const mode = searchParams.get("mode") ?? undefined;
+  const deleted = searchParams.get("deleted") ?? undefined;
+  const deletedName = searchParams.get("deletedName") ?? undefined;
 
-export default async function SuperAdminPage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    updated?: string;
-    mode?: string;
-    deleted?: string;
-    deletedName?: string;
-  }>;
-}) {
-  const allowed = await isSuperAdmin();
-  if (!allowed) {
-    redirect("/grupos");
+  const { data, loading } = useApiData<{
+    allowed: boolean;
+    data?: SuperAdminDashboardData;
+  }>("/api/page-data/superadmin");
+
+  useEffect(() => {
+    if (data && !data.allowed) {
+      window.location.replace("/grupos");
+    }
+  }, [data]);
+
+  if ((loading && !data) || !data?.allowed || !data.data) {
+    return <div className="pt-12 text-center text-sm text-zinc-500">Cargando Panel de Dueño...</div>;
   }
-
-  const { updated, mode, deleted, deletedName } = await searchParams;
-  const data = await getSuperAdminDashboardData();
 
   return (
     <SuperAdminClient
-      data={data}
+      data={data.data}
       updated={updated}
       mode={mode}
       deleted={deleted}
       deletedName={deletedName}
     />
+  );
+}
+
+export default function SuperAdminPage() {
+  return (
+    <Suspense fallback={<div className="pt-12 text-center text-sm text-zinc-500">Cargando...</div>}>
+      <SuperAdminContent />
+    </Suspense>
   );
 }

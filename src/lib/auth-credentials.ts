@@ -1,7 +1,59 @@
-import "server-only";
-import crypto from "crypto";
+import { scryptSync, timingSafeEqual } from "node:crypto";
 import { db, players } from "@/db";
 import { eq, sql } from "drizzle-orm";
+
+const PBKDF2_ITERATIONS = 50000;
+const encoder = new TextEncoder();
+
+function bytesToHex(bytes: Uint8Array): string {
+  let out = "";
+  for (let i = 0; i < bytes.length; i++) {
+    out += bytes[i].toString(16).padStart(2, "0");
+  }
+  return out;
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+function timingSafeEqualBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a[i] ^ b[i];
+  }
+  return diff === 0;
+}
+
+async function derivePbkdf2Hex(
+  password: string,
+  salt: Uint8Array,
+  iterations: number
+): Promise<Uint8Array> {
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-256",
+      salt: salt as BufferSource,
+      iterations,
+    },
+    keyMaterial,
+    256
+  );
+  return new Uint8Array(bits);
+}
 
 let credentialsTableChecked = false;
 
@@ -28,22 +80,38 @@ export async function ensureCredentialsTable() {
   }
 }
 
-export function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const derived = crypto.scryptSync(password, salt, 64).toString("hex");
-  return `${salt}:${derived}`;
+export async function hashPassword(password: string): Promise<string> {
+  const salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  const derived = await derivePbkdf2Hex(password, salt, PBKDF2_ITERATIONS);
+  return `pbkdf2:${PBKDF2_ITERATIONS}:${bytesToHex(salt)}:${bytesToHex(derived)}`;
 }
 
-export function verifyPassword(password: string, storedHash: string): boolean {
+export async function verifyPassword(
+  password: string,
+  storedHash: string
+): Promise<{ valid: boolean; needsUpgrade: boolean }> {
   try {
+    if (storedHash.startsWith("pbkdf2:")) {
+      const [, iterStr, saltHex, keyHex] = storedHash.split(":");
+      const iterations = Number(iterStr);
+      if (!iterations || !saltHex || !keyHex) {
+        return { valid: false, needsUpgrade: false };
+      }
+      const derived = await derivePbkdf2Hex(password, hexToBytes(saltHex), iterations);
+      const expected = hexToBytes(keyHex);
+      return { valid: timingSafeEqualBytes(derived, expected), needsUpgrade: false };
+    }
+
+    // Fallback legacy scrypt (<saltHex>:<scryptHex>): verifica y marca para migrar a PBKDF2
     const [salt, key] = storedHash.split(":");
-    if (!salt || !key) return false;
-    const derived = crypto.scryptSync(password, salt, 64);
+    if (!salt || !key) return { valid: false, needsUpgrade: false };
+    const derived = scryptSync(password, salt, 64);
     const keyBuffer = Buffer.from(key, "hex");
-    if (derived.length !== keyBuffer.length) return false;
-    return crypto.timingSafeEqual(derived, keyBuffer);
+    if (derived.length !== keyBuffer.length) return { valid: false, needsUpgrade: false };
+    return { valid: timingSafeEqual(derived, keyBuffer), needsUpgrade: true };
   } catch {
-    return false;
+    return { valid: false, needsUpgrade: false };
   }
 }
 
@@ -71,8 +139,21 @@ export async function verifyCredentials(emailInput: string, passwordInput: strin
 
   if (!credRow) return null;
 
-  const valid = verifyPassword(passwordInput, credRow.password_hash);
+  const { valid, needsUpgrade } = await verifyPassword(passwordInput, credRow.password_hash);
   if (!valid) return null;
+
+  if (needsUpgrade) {
+    try {
+      const upgradedHash = await hashPassword(passwordInput);
+      await db.execute(sql`
+        UPDATE player_credentials
+        SET password_hash = ${upgradedHash}
+        WHERE player_id = ${credRow.player_id}
+      `);
+    } catch (err) {
+      console.warn("Could not upgrade scrypt hash to pbkdf2:", err);
+    }
+  }
 
   // Obtener el jugador
   const player = (
@@ -155,7 +236,7 @@ export async function registerOrSetPassword(params: {
   }
 
   // Guardar credenciales
-  const passHash = hashPassword(params.password);
+  const passHash = await hashPassword(params.password);
   await db.execute(sql`
     INSERT INTO player_credentials (player_id, email, password_hash, created_at)
     VALUES (${targetPlayerId}, ${normalizedEmail}, ${passHash}, NOW())
@@ -184,7 +265,7 @@ export async function adminResetPlayerPassword(playerId: number, newPassword: st
   }
 
   const normalizedEmail = player.email.toLowerCase().trim();
-  const passHash = hashPassword(newPassword);
+  const passHash = await hashPassword(newPassword);
 
   await db.execute(sql`
     INSERT INTO player_credentials (player_id, email, password_hash, created_at)

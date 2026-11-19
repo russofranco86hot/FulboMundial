@@ -1,4 +1,3 @@
-import "server-only";
 import { db, matches, signups, type Match } from "@/db";
 import { and, eq } from "drizzle-orm";
 import { artWallTimeToUtc, ART_TZ, formatArt } from "./time";

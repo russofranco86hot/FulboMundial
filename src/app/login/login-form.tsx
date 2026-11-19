@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { actionRegisterCredentials } from "./actions";
-import { signIn } from "next-auth/react";
+import { API_BASE, apiFetch, setAuthToken, triggerDataRefresh } from "@/lib/client-api";
 import { LogIn, UserPlus, Mail, Lock, User, AlertCircle } from "lucide-react";
 
 export function LoginForm({
@@ -35,18 +34,21 @@ export function LoginForm({
     }
 
     try {
-      const res = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
+      const res = await apiFetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
+      const data = (await res.json()) as { ok?: boolean; error?: string; token?: string };
 
-      if (!res || res.error) {
-        setLoginError("Correo o contraseña incorrectos.");
+      if (!res.ok || !data.ok) {
+        setLoginError(data.error || "Correo o contraseña incorrectos.");
         setLoginPending(false);
         return;
       }
 
+      if (data.token) setAuthToken(data.token);
+      triggerDataRefresh();
       window.location.href = targetUrl;
     } catch {
       setLoginError("Error al iniciar sesión. Verificá tus credenciales.");
@@ -66,34 +68,21 @@ export function LoginForm({
     const confirmPassword = String(formData.get("confirmPassword") || "");
 
     try {
-      const regRes = await actionRegisterCredentials({
-        name,
-        email,
-        password,
-        confirmPassword,
+      const res = await apiFetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password, confirmPassword }),
       });
+      const data = (await res.json()) as { ok?: boolean; error?: string; token?: string };
 
-      if (regRes.error) {
-        setRegError(regRes.error);
+      if (!res.ok || !data.ok) {
+        setRegError(data.error || "Ocurrió un problema al registrar la cuenta.");
         setRegPending(false);
         return;
       }
 
-      const loginRes = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-
-      if (!loginRes || loginRes.error) {
-        setRegError(
-          "Cuenta creada correctamente. Ahora podés iniciar sesión con tu correo y clave."
-        );
-        setMode("login");
-        setRegPending(false);
-        return;
-      }
-
+      if (data.token) setAuthToken(data.token);
+      triggerDataRefresh();
       window.location.href = targetUrl;
     } catch {
       setRegError("Ocurrió un problema al registrar la cuenta. Intentá nuevamente.");
@@ -105,7 +94,11 @@ export function LoginForm({
     <div className="w-full max-w-sm space-y-5 animate-fade-in">
       {/* Botón de Google */}
       <button
-        onClick={() => signIn("google", { callbackUrl: targetUrl })}
+        onClick={() => {
+          window.location.assign(
+            `${API_BASE}/api/auth/google?callbackUrl=${encodeURIComponent(targetUrl)}`
+          );
+        }}
         type="button"
         className="btn-ghost w-full py-2.5 px-4 flex items-center justify-center gap-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-750 shadow-sm text-sm font-semibold text-zinc-700 dark:text-zinc-200"
       >

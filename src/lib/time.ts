@@ -34,9 +34,14 @@ export function parseArtInputDateTime(val: string): Date {
   return new Date(val);
 }
 
+/** Convierte Date | string a Date válida. */
+function toDate(d: Date | string): Date {
+  return typeof d === "string" ? new Date(d) : d;
+}
+
 /** Devuelve los componentes de fecha (en ART) de un instante. */
-function artParts(date: Date) {
-  const z = toZonedTime(date, ART_TZ);
+function artParts(date: Date | string) {
+  const z = toZonedTime(toDate(date), ART_TZ);
   return {
     year: z.getFullYear(),
     month: z.getMonth() + 1,
@@ -76,17 +81,19 @@ export function nextMatchDate(now: Date = new Date()): Date {
 export function nextGroupMatchDate(
   dayOfWeek?: number | null,
   timeStr = "21:00",
-  now: Date = new Date(),
-  lastMatchDate?: Date | null
+  now: Date | string = new Date(),
+  lastMatchDate?: Date | string | null
 ): Date {
+  const nowD = toDate(now);
+  const lastD = lastMatchDate ? toDate(lastMatchDate) : null;
   const parts = (timeStr || "21:00").split(":");
   let targetHour = parseInt(parts[0] || "21", 10);
   let targetMinute = parseInt(parts[1] || "0", 10);
 
   let targetDay = dayOfWeek;
   if (targetDay === null || targetDay === undefined) {
-    if (lastMatchDate) {
-      const lp = artParts(lastMatchDate);
+    if (lastD) {
+      const lp = artParts(lastD);
       targetDay = lp.weekday;
       targetHour = lp.hour;
       targetMinute = lp.minute;
@@ -96,17 +103,17 @@ export function nextGroupMatchDate(
   }
 
   // Si hay un partido de referencia, calcular 7 días después de ese partido
-  if (lastMatchDate) {
-    const nextWeekSameTime = new Date(lastMatchDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+  if (lastD) {
+    const nextWeekSameTime = new Date(lastD.getTime() + 7 * 24 * 60 * 60 * 1000);
     const np = artParts(nextWeekSameTime);
-    let daysUntil = (targetDay - np.weekday + 7) % 7;
+    const daysUntil = (targetDay - np.weekday + 7) % 7;
     const base = artWallTimeToUtc(np.year, np.month, np.day, targetHour, targetMinute);
     const target = new Date(base.getTime() + daysUntil * 24 * 60 * 60 * 1000);
     const tp = artParts(target);
     return artWallTimeToUtc(tp.year, tp.month, tp.day, targetHour, targetMinute);
   }
 
-  const p = artParts(now);
+  const p = artParts(nowD);
   let daysUntil = (targetDay - p.weekday + 7) % 7;
   // Si hoy es el mismo día pero ya pasó la hora del partido, programar para la próxima semana
   if (
@@ -123,18 +130,19 @@ export function nextGroupMatchDate(
 }
 
 /** Ventana de inscripción para un partido dado. */
-export function signupWindow(matchDate: Date): { opensAt: Date; closesAt: Date } {
-  const p = artParts(matchDate);
+export function signupWindow(matchDate: Date | string): { opensAt: Date; closesAt: Date } {
+  const d = toDate(matchDate);
+  const p = artParts(d);
   // Cierra el mismo miércoles 12:00 ART
   const closesAt = artWallTimeToUtc(p.year, p.month, p.day, 12, 0);
   // Abre el miércoles anterior 23:00 ART (matchDate − 7 días)
-  const prev = new Date(matchDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const prev = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000);
   const pp = artParts(prev);
   const opensAt = artWallTimeToUtc(pp.year, pp.month, pp.day, 23, 0);
   return { opensAt, closesAt };
 }
 
 /** Formatea un instante en hora argentina, p.ej. "miércoles 25/06 22:00". */
-export function formatArt(date: Date, pattern = "EEEE dd/MM HH:mm"): string {
-  return formatTz(toZonedTime(date, ART_TZ), pattern, { timeZone: ART_TZ, locale: es });
+export function formatArt(date: Date | string, pattern = "EEEE dd/MM HH:mm"): string {
+  return formatTz(toZonedTime(toDate(date), ART_TZ), pattern, { timeZone: ART_TZ, locale: es });
 }

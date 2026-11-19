@@ -1,6 +1,19 @@
-import { redirect } from "next/navigation";
-import { getSessionUser, getCurrentPlayer, getPlayerGroups } from "@/lib/session";
-import { getPendingNameRequestForPlayer } from "@/lib/name-requests";
+"use client";
+
+import { Suspense, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  Shield,
+  Edit3,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
+  Layers,
+  Crown,
+} from "lucide-react";
 import { formatArt } from "@/lib/time";
 import {
   actionRequestNameChange,
@@ -8,51 +21,49 @@ import {
   actionUpdatePreferences,
 } from "./actions";
 import { SignOutButton } from "@/components/auth-buttons";
-import Link from "next/link";
-import {
-  ArrowLeft,
-  User,
-  Shield,
-  Edit3,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  LogOut,
-  Sparkles,
-  Layers,
-  Crown,
-} from "lucide-react";
-import { isSuperAdmin } from "@/lib/superadmin";
+import { useApiData } from "@/lib/client-api";
 
-export const dynamic = "force-dynamic";
+type PerfilData = {
+  authRequired?: boolean;
+  user?: { email?: string | null; name?: string | null };
+  player?: {
+    id: number;
+    name: string;
+    email: string | null;
+    isGoalkeeper: boolean;
+    preferredPosition: string | null;
+    preferredFoot: string | null;
+  };
+  pendingNameRequest?: {
+    id: number;
+    requestedName: string;
+    createdAt: string | Date;
+  } | null;
+  playerGroupsCount?: number;
+  superAdmin?: boolean;
+};
 
-export default async function PerfilPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ error?: string; success?: string }>;
-}) {
-  const user = await getSessionUser();
-  if (!user) {
-    redirect(`/login?callbackUrl=${encodeURIComponent("/perfil")}`);
+function PerfilContent() {
+  const searchParams = useSearchParams();
+  const success = searchParams.get("success");
+  const error = searchParams.get("error");
+  const { data, loading } = useApiData<PerfilData>("/api/page-data/perfil");
+
+  useEffect(() => {
+    if (data?.authRequired) {
+      window.location.replace(`/login?callbackUrl=${encodeURIComponent("/perfil")}`);
+    }
+  }, [data?.authRequired]);
+
+  if ((loading && !data) || !data?.player || !data?.user) {
+    return <div className="pt-12 text-center text-sm text-zinc-500">Cargando perfil...</div>;
   }
 
-  const player = await getCurrentPlayer();
-  if (!player) {
-    redirect(`/login?callbackUrl=${encodeURIComponent("/perfil")}`);
-  }
-
-  const [pendingNameRequest, playerGroups, params, superAdmin] = await Promise.all([
-    getPendingNameRequestForPlayer(player.id),
-    getPlayerGroups(),
-    searchParams ? await searchParams : {},
-    isSuperAdmin(),
-  ]);
-
+  const { user, player, pendingNameRequest, playerGroupsCount = 0, superAdmin } = data;
   const initialChar = player.name ? player.name.trim().charAt(0).toUpperCase() : "•";
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link href="/grupos" className="btn-ghost p-2 rounded-full" title="Volver a Mis Grupos">
@@ -63,27 +74,23 @@ export default async function PerfilPage({
             <p className="text-xs text-pitch-900/60 dark:text-zinc-400">Configuración de tu cuenta y jugador</p>
           </div>
         </div>
-
-        {/* Botón rápido de cerrar sesión en la cabecera */}
         <SignOutButton compact />
       </div>
 
-      {/* Alertas de Éxito / Error */}
-      {params.success && (
+      {success && (
         <div className="rounded-2xl bg-green-500/15 p-4 text-sm font-semibold text-green-800 dark:text-green-300 border border-green-500/30 flex items-center gap-3 shadow-glow-green">
           <CheckCircle2 className="text-green-600 dark:text-green-400 shrink-0" size={22} />
-          <span>{params.success}</span>
+          <span>{success}</span>
         </div>
       )}
 
-      {params.error && (
+      {error && (
         <div className="rounded-2xl bg-red-500/15 p-4 text-sm font-semibold text-red-800 dark:text-red-300 border border-red-500/30 flex items-center gap-3">
           <AlertCircle className="text-red-600 dark:text-red-400 shrink-0" size={22} />
-          <span>{params.error}</span>
+          <span>{error}</span>
         </div>
       )}
 
-      {/* Acceso directo al Panel de Dueño (SuperAdmin) */}
       {superAdmin && (
         <div className="rounded-2xl border-2 border-amber-400/70 bg-gradient-to-r from-zinc-950 via-emerald-950 to-zinc-900 text-white p-4 flex items-center justify-between gap-3 shadow-lg">
           <div className="flex items-center gap-3">
@@ -108,7 +115,6 @@ export default async function PerfilPage({
         </div>
       )}
 
-      {/* Tarjeta de Identidad de Jugador */}
       <div className="card space-y-4 bg-gradient-to-br from-pitch-50/50 via-white to-emerald-50/30 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950 border-pitch-200/80 dark:border-zinc-800">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-pitch-600 to-pitch-400 text-white flex items-center justify-center font-black text-2xl shadow-glow-green shrink-0">
@@ -122,7 +128,7 @@ export default async function PerfilPage({
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <span className="chip bg-pitch-100 dark:bg-pitch-950/60 text-pitch-800 dark:text-pitch-300 text-[11px] font-bold px-2.5 py-0.5">
                 <Layers size={11} className="inline mr-1" />
-                {playerGroups.length} {playerGroups.length === 1 ? "grupo activo" : "grupos activos"}
+                {playerGroupsCount} {playerGroupsCount === 1 ? "grupo activo" : "grupos activos"}
               </span>
               {player.preferredPosition && (
                 <span className="chip bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-[11px] font-bold px-2.5 py-0.5 border border-zinc-200/50 dark:border-zinc-700">
@@ -140,7 +146,6 @@ export default async function PerfilPage({
         </div>
       </div>
 
-      {/* Sección 1: Cambiar Nombre con Aprobación del Admin */}
       <div className="card space-y-4">
         <div className="flex items-center gap-2 border-b border-pitch-100/60 dark:border-zinc-800 pb-3">
           <Edit3 size={18} className="text-pitch-600 dark:text-pitch-400" />
@@ -215,7 +220,6 @@ export default async function PerfilPage({
         )}
       </div>
 
-      {/* Sección 2: Preferencias Futbolísticas */}
       <div className="card space-y-4">
         <div className="flex items-center gap-2 border-b border-pitch-100/60 dark:border-zinc-800 pb-3">
           <Sparkles size={18} className="text-pitch-600 dark:text-pitch-400" />
@@ -262,7 +266,6 @@ export default async function PerfilPage({
         </form>
       </div>
 
-      {/* Sección 3: Cuenta y Cerrar Sesión */}
       <div className="card space-y-4 border-red-200/60 dark:border-red-950/40">
         <div className="flex items-center gap-2 border-b border-pitch-100/60 dark:border-zinc-800 pb-3">
           <Shield size={18} className="text-zinc-500" />
@@ -281,5 +284,13 @@ export default async function PerfilPage({
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PerfilPage() {
+  return (
+    <Suspense fallback={<div className="pt-12 text-center text-sm text-zinc-500">Cargando...</div>}>
+      <PerfilContent />
+    </Suspense>
   );
 }

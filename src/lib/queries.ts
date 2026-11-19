@@ -1,5 +1,4 @@
-import "server-only";
-import { cache } from "react";
+import { requestCache as cache } from "./request-context";
 import { db, matches, signups, players, teams, results, matchVotes, type Match, type Player } from "@/db";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { computeSelection, type SelectionRow } from "./selection";
@@ -543,27 +542,29 @@ export async function getRecentMatches(groupId?: number, limitN = 5) {
 }
 
 export async function getMatchDetails(matchId: number) {
-  const m = await db
-    .select({
-      id: matches.id,
-      groupId: matches.groupId,
-      format: matches.format,
-      status: matches.status,
-      matchDate: matches.matchDate,
-      scoreA: results.scoreA,
-      scoreB: results.scoreB,
-      result: results.result,
-      notes: results.notes,
-      teamAName: matches.teamAName,
-      teamBName: matches.teamBName,
-    })
-    .from(matches)
-    .leftJoin(results, eq(matches.id, results.matchId))
-    .where(eq(matches.id, matchId))
-    .limit(1);
+  const [m, t] = await Promise.all([
+    db
+      .select({
+        id: matches.id,
+        groupId: matches.groupId,
+        format: matches.format,
+        status: matches.status,
+        matchDate: matches.matchDate,
+        scoreA: results.scoreA,
+        scoreB: results.scoreB,
+        result: results.result,
+        notes: results.notes,
+        teamAName: matches.teamAName,
+        teamBName: matches.teamBName,
+      })
+      .from(matches)
+      .leftJoin(results, eq(matches.id, results.matchId))
+      .where(eq(matches.id, matchId))
+      .limit(1),
+    getMatchTeams(matchId),
+  ]);
 
   if (!m[0]) return null;
-  const t = await getMatchTeams(matchId);
   return { ...m[0], teams: t };
 }
 

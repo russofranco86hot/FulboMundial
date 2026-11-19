@@ -1,988 +1,131 @@
-"use server";
+"use client";
 
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { and, desc, eq, sql } from "drizzle-orm";
-import { db, players, matches, signups, teams, results, attendanceLog } from "@/db";
-import { requireGroupAdmin } from "@/lib/session";
-import { getCurrentMatch, getStandings, getSelection } from "@/lib/queries";
-import { openNextMatch, closeSignups, recomputeFinalStatuses } from "@/lib/match-actions";
-import { buildBalancedTeams, type TeamPlayer } from "@/lib/teams";
-import { pushToAll, pushToGroupMembers } from "@/lib/push";
-import { computeSelection } from "@/lib/selection";
-import { getAdvancedStats } from "@/lib/stats";
-import { notifyMatchCompletionAndAchievements } from "@/lib/achievements";
-import { artWallTimeToUtc, formatArt } from "@/lib/time";
+import { callRpc } from "@/lib/client-api";
 
-import { savePlayerComment, regenerateAllGroupComments } from "@/lib/player-comments";
-import { saveMatchPaymentConfig, adminTogglePlayerPaid } from "@/lib/payments";
-import { saveMatchGoals } from "@/lib/goals";
-import { adminResetPlayerPassword } from "@/lib/auth-credentials";
-
-function refreshGroup(groupSlug: string) {
-  revalidatePath(`/grupos/${groupSlug}`);
-  revalidatePath(`/grupos/${groupSlug}/equipos`);
-  revalidatePath(`/grupos/${groupSlug}/historial`);
-  revalidatePath(`/grupos/${groupSlug}/estadisticas`);
-  revalidatePath(`/grupos/${groupSlug}/admin`);
-  revalidatePath(`/grupos/${groupSlug}/admin/partido`);
-  revalidatePath(`/grupos/${groupSlug}/admin/jugadores`);
-  revalidatePath(`/grupos/${groupSlug}/admin/comentarios`);
-  revalidatePath(`/grupos/${groupSlug}/admin/resultado`);
-  revalidatePath(`/grupos/${groupSlug}/admin/configuracion`);
-  revalidatePath(`/grupos/${groupSlug}/admin/push`);
-  revalidatePath(`/grupos`);
+export async function adminOpenGroupMatch(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminOpenGroupMatch", [formData]);
 }
 
-// ─── Partido ─────────────────────────────────────────────────────────────
-export async function adminOpenGroupMatch(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const dateRaw = String(formData.get("matchDate") || "").trim();
-  let matchDate: Date;
-  if (dateRaw) {
-    const { parseArtInputDateTime } = await import("@/lib/time");
-    matchDate = parseArtInputDateTime(dateRaw);
-  } else {
-    const { groups } = await import("@/db/schema");
-    const { nextGroupMatchDate } = await import("@/lib/time");
-    const grp = (await db.select().from(groups).where(eq(groups.id, groupId)).limit(1))[0];
-    const lastM = (
-      await db
-        .select({ matchDate: matches.matchDate })
-        .from(matches)
-        .where(eq(matches.groupId, groupId))
-        .orderBy(desc(matches.matchDate))
-        .limit(1)
-    )[0];
-    matchDate = nextGroupMatchDate(
-      grp?.defaultDayOfWeek,
-      grp?.defaultTime ?? "21:00",
-      new Date(),
-      lastM?.matchDate
-    );
-  }
-
-  const capacity = Number(formData.get("capacity")) || 10;
-  const format = String(formData.get("format") || "F5");
-
-  const newMatch = await openNextMatch({
-    groupId,
-    matchDate,
-    capacity,
-    format,
-    notify: true,
-  });
-
-  refreshGroup(groupSlug);
-  redirect(`/grupos/${groupSlug}/admin/partido?matchId=${newMatch.id}&opened=1`);
+export async function adminGroupUpdateMatch(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupUpdateMatch", [formData]);
 }
 
-export async function adminGroupUpdateMatch(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const matchId = Number(formData.get("matchId"));
-  if (!matchId) return;
-
-  const dateRaw = String(formData.get("matchDate") || "").trim();
-  const capacity = Number(formData.get("capacity")) || 10;
-  const format = String(formData.get("format") || "F5");
-
-  const updates: Record<string, any> = {
-    capacity,
-    format,
-  };
-
-  if (formData.has("teamAName")) {
-    const val = String(formData.get("teamAName") || "").trim();
-    updates.teamAName = val || null;
-  }
-  if (formData.has("teamBName")) {
-    const val = String(formData.get("teamBName") || "").trim();
-    updates.teamBName = val || null;
-  }
-
-  if (dateRaw) {
-    const { parseArtInputDateTime, signupWindow } = await import("@/lib/time");
-    const matchDate = parseArtInputDateTime(dateRaw);
-    const { opensAt, closesAt } = signupWindow(matchDate);
-    updates.matchDate = matchDate;
-    updates.signupOpensAt = opensAt;
-    updates.signupClosesAt = closesAt;
-  }
-
-  await db.update(matches).set(updates).where(eq(matches.id, matchId));
-  refreshGroup(groupSlug);
-
-  const returnTo = String(formData.get("returnTo") || "").trim();
-  const targetUrl = returnTo
-    ? (returnTo.includes("?") ? `${returnTo}&saved=1` : `${returnTo}?saved=1`)
-    : `/grupos/${groupSlug}/admin/partido?matchId=${matchId}&saved=1`;
-  redirect(targetUrl);
+export async function adminCloseGroupMatch(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminCloseGroupMatch", [formData]);
 }
 
-export async function adminCloseGroupMatch(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const formMatchId = Number(formData.get("matchId"));
-  const match = formMatchId
-    ? (await db.select().from(matches).where(eq(matches.id, formMatchId)).limit(1))[0]
-    : await getCurrentMatch(groupId);
-  if (match && match.status === "open") {
-    await closeSignups(match, { notify: true });
-  }
-  refreshGroup(groupSlug);
+export async function adminReopenGroupMatch(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminReopenGroupMatch", [formData]);
 }
 
-export async function adminReopenGroupMatch(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const formMatchId = Number(formData.get("matchId"));
-  const match = formMatchId
-    ? (await db.select().from(matches).where(eq(matches.id, formMatchId)).limit(1))[0]
-    : await getCurrentMatch(groupId);
-  if (match) {
-    await db.update(matches).set({ status: "open" }).where(eq(matches.id, match.id));
-  }
-  refreshGroup(groupSlug);
+export async function adminGroupFinishMatchWithoutResult(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupFinishMatchWithoutResult", [formData]);
 }
 
-export async function adminGroupFinishMatchWithoutResult(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const matchId = Number(formData.get("matchId"));
-  if (!matchId) return;
-
-  await db
-    .update(matches)
-    .set({ status: "finished" })
-    .where(and(eq(matches.id, matchId), eq(matches.groupId, groupId)));
-
-  refreshGroup(groupSlug);
-  redirect(`/grupos/${groupSlug}/admin?finished=1`);
+export async function adminGroupDeleteMatch(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupDeleteMatch", [formData]);
 }
 
-export async function adminGroupDeleteMatch(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const matchId = Number(formData.get("matchId"));
-  if (!matchId) return;
-
-  await db
-    .delete(matches)
-    .where(and(eq(matches.id, matchId), eq(matches.groupId, groupId)));
-
-  refreshGroup(groupSlug);
-  redirect(`/grupos/${groupSlug}/admin?deleted=1`);
+export async function adminGroupToggleSignup(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupToggleSignup", [formData]);
 }
 
-export async function adminGroupToggleSignup(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const playerId = Number(formData.get("playerId"));
-  const action = String(formData.get("action")); // "add" | "remove"
-  const match = await getCurrentMatch(groupId);
-  if (!match || !playerId) return;
-
-  const existing = (
-    await db
-      .select()
-      .from(signups)
-      .where(and(eq(signups.matchId, match.id), eq(signups.playerId, playerId)))
-      .limit(1)
-  )[0];
-
-  if (action === "add") {
-    if (existing) {
-      await db
-        .update(signups)
-        .set({ withdrawn: false, withdrawnAt: null })
-        .where(eq(signups.id, existing.id));
-    } else {
-      await db.insert(signups).values({ matchId: match.id, playerId });
-    }
-  } else {
-    if (existing) {
-      await db
-        .update(signups)
-        .set({ withdrawn: true, withdrawnAt: new Date() })
-        .where(eq(signups.id, existing.id));
-    }
-  }
-
-  if (match.status !== "open") {
-    await recomputeFinalStatuses(match);
-  }
-  refreshGroup(groupSlug);
+export async function adminGroupReorderSignup(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupReorderSignup", [formData]);
 }
 
-/**
- * Reordena subiendo (up) o bajando (down) de posición a un jugador anotado en el partido.
- */
-export async function adminGroupReorderSignup(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  const matchId = Number(formData.get("matchId"));
-  const playerId = Number(formData.get("playerId"));
-  const direction = String(formData.get("direction")); // "up" | "down"
-  await requireGroupAdmin(groupId);
-
-  const match = matchId
-    ? (await db.select().from(matches).where(eq(matches.id, matchId)).limit(1))[0]
-    : await getCurrentMatch(groupId);
-  if (!match || !playerId) return;
-
-  const selection = await getSelection(match);
-  const currentIndex = selection.findIndex((s) => s.playerId === playerId);
-  if (currentIndex === -1) return;
-
-  const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-  if (targetIndex < 0 || targetIndex >= selection.length) return;
-
-  const reordered = [...selection];
-  const [moved] = reordered.splice(currentIndex, 1);
-  reordered.splice(targetIndex, 0, moved);
-
-  for (let i = 0; i < reordered.length; i++) {
-    await db
-      .update(signups)
-      .set({ manualOrder: i + 1 })
-      .where(and(eq(signups.matchId, match.id), eq(signups.playerId, reordered[i].playerId)));
-  }
-
-  if (match.status !== "open") {
-    await recomputeFinalStatuses(match);
-  }
-  refreshGroup(groupSlug);
+export async function adminGroupMoveToSubstitute(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupMoveToSubstitute", [formData]);
 }
 
-/**
- * Pasa a un jugador titular a los suplentes (se mueve a la posición de primer suplente).
- */
-export async function adminGroupMoveToSubstitute(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  const matchId = Number(formData.get("matchId"));
-  const playerId = Number(formData.get("playerId"));
-  await requireGroupAdmin(groupId);
-
-  const match = matchId
-    ? (await db.select().from(matches).where(eq(matches.id, matchId)).limit(1))[0]
-    : await getCurrentMatch(groupId);
-  if (!match || !playerId) return;
-
-  const selection = await getSelection(match);
-  const currentIndex = selection.findIndex((s) => s.playerId === playerId);
-  if (currentIndex === -1) return;
-
-  // Destino: primer suplente (índice capacity) o el último disponible
-  const targetIndex = Math.min(match.capacity, selection.length - 1);
-  if (currentIndex === targetIndex) return;
-
-  const reordered = [...selection];
-  const [moved] = reordered.splice(currentIndex, 1);
-  reordered.splice(targetIndex, 0, moved);
-
-  for (let i = 0; i < reordered.length; i++) {
-    await db
-      .update(signups)
-      .set({ manualOrder: i + 1 })
-      .where(and(eq(signups.matchId, match.id), eq(signups.playerId, reordered[i].playerId)));
-  }
-
-  if (match.status !== "open") {
-    await recomputeFinalStatuses(match);
-  }
-  refreshGroup(groupSlug);
+export async function adminGroupMoveToPlaying(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupMoveToPlaying", [formData]);
 }
 
-/**
- * Pasa a un jugador suplente a los titulares (se mueve a la posición de último titular).
- */
-export async function adminGroupMoveToPlaying(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  const matchId = Number(formData.get("matchId"));
-  const playerId = Number(formData.get("playerId"));
-  await requireGroupAdmin(groupId);
-
-  const match = matchId
-    ? (await db.select().from(matches).where(eq(matches.id, matchId)).limit(1))[0]
-    : await getCurrentMatch(groupId);
-  if (!match || !playerId) return;
-
-  const selection = await getSelection(match);
-  const currentIndex = selection.findIndex((s) => s.playerId === playerId);
-  if (currentIndex === -1) return;
-
-  // Destino: último titular (índice capacity - 1)
-  const targetIndex = Math.max(0, Math.min(match.capacity - 1, selection.length - 1));
-  if (currentIndex === targetIndex) return;
-
-  const reordered = [...selection];
-  const [moved] = reordered.splice(currentIndex, 1);
-  reordered.splice(targetIndex, 0, moved);
-
-  for (let i = 0; i < reordered.length; i++) {
-    await db
-      .update(signups)
-      .set({ manualOrder: i + 1 })
-      .where(and(eq(signups.matchId, match.id), eq(signups.playerId, reordered[i].playerId)));
-  }
-
-  if (match.status !== "open") {
-    await recomputeFinalStatuses(match);
-  }
-  refreshGroup(groupSlug);
+export async function adminGroupResetSignupsOrder(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupResetSignupsOrder", [formData]);
 }
 
-/**
- * Restablece el orden de los anotados al orden automático por llegada (hora de inscripción).
- */
-export async function adminGroupResetSignupsOrder(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  const matchId = Number(formData.get("matchId"));
-  await requireGroupAdmin(groupId);
-
-  const match = matchId
-    ? (await db.select().from(matches).where(eq(matches.id, matchId)).limit(1))[0]
-    : await getCurrentMatch(groupId);
-  if (!match) return;
-
-  await db
-    .update(signups)
-    .set({ manualOrder: null })
-    .where(eq(signups.matchId, match.id));
-
-  if (match.status !== "open") {
-    await recomputeFinalStatuses(match);
-  }
-  refreshGroup(groupSlug);
+export async function adminGroupGenerateTeams(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupGenerateTeams", [formData]);
 }
 
-// ─── Equipos ─────────────────────────────────────────────────────────────
-export async function adminGroupGenerateTeams(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const match = await getCurrentMatch(groupId);
-  if (!match) return;
-  const seed = Number(formData.get("seed")) || Math.floor((Date.now() % 100000) + 1);
-
-  const active = await db
-    .select({
-      playerId: signups.playerId,
-      priorityOrder: players.priorityOrder,
-      signupAt: signups.signupAt,
-      name: players.name,
-      stars: players.stars,
-      isGoalkeeper: players.isGoalkeeper,
-      preferredPosition: players.preferredPosition,
-      preferredFoot: players.preferredFoot,
-    })
-    .from(signups)
-    .innerJoin(players, eq(players.id, signups.playerId))
-    .where(and(eq(signups.matchId, match.id), eq(signups.withdrawn, false)));
-
-  const selection = computeSelection(
-    active.map((a) => ({ ...a, signupAt: a.signupAt })),
-    match.capacity
-  ).filter((s) => s.status === "playing");
-
-  const guestRows = await db
-    .select({
-      playerId: teams.playerId,
-      name: players.name,
-      stars: players.stars,
-      isGoalkeeper: players.isGoalkeeper,
-      preferredPosition: players.preferredPosition,
-      preferredFoot: players.preferredFoot,
-    })
-    .from(teams)
-    .innerJoin(players, eq(players.id, teams.playerId))
-    .where(and(eq(teams.matchId, match.id), eq(teams.isGuest, true)));
-
-  const pool: TeamPlayer[] = [
-    ...selection.map((s) => ({
-      playerId: s.playerId,
-      name: s.name,
-      stars: Number(s.stars) || 0,
-      isGoalkeeper: s.isGoalkeeper,
-      isGuest: false,
-      preferredPosition: s.preferredPosition,
-      preferredFoot: s.preferredFoot,
-    })),
-    ...guestRows.map((g) => ({
-      playerId: g.playerId,
-      name: g.name,
-      stars: Number(g.stars) || 0,
-      isGoalkeeper: g.isGoalkeeper,
-      isGuest: true,
-      preferredPosition: g.preferredPosition,
-      preferredFoot: g.preferredFoot,
-    })),
-  ];
-
-  const split = buildBalancedTeams(pool, seed);
-
-  await db.delete(teams).where(eq(teams.matchId, match.id));
-  const rows = [
-    ...split.teamA.map((p) => ({
-      matchId: match.id,
-      team: "A" as const,
-      playerId: p.playerId,
-      isGuest: p.isGuest,
-    })),
-    ...split.teamB.map((p) => ({
-      matchId: match.id,
-      team: "B" as const,
-      playerId: p.playerId,
-      isGuest: p.isGuest,
-    })),
-  ];
-  if (rows.length) await db.insert(teams).values(rows);
-  refreshGroup(groupSlug);
+export async function adminGroupMoveTeam(rowId: number, team: "A" | "B", groupSlug: string): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupMoveTeam", [rowId, team, groupSlug]);
 }
 
-export async function adminGroupMoveTeam(rowId: number, team: "A" | "B", groupSlug: string) {
-  if (!rowId) return;
-  await db.update(teams).set({ team }).where(eq(teams.id, rowId));
-  refreshGroup(groupSlug);
+export async function adminGroupRemoveRow(rowId: number, groupSlug: string): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupRemoveRow", [rowId, groupSlug]);
 }
 
-export async function adminGroupRemoveRow(rowId: number, groupSlug: string) {
-  if (!rowId) return;
-  await db.delete(teams).where(eq(teams.id, rowId));
-  refreshGroup(groupSlug);
+export async function adminGroupClearTeams(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupClearTeams", [formData]);
 }
 
-export async function adminGroupClearTeams(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const matchId = Number(formData.get("matchId"));
-  if (!matchId) return;
-
-  await db.delete(teams).where(eq(teams.matchId, matchId));
-  refreshGroup(groupSlug);
+export async function adminGroupAddPlayerToTeam(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupAddPlayerToTeam", [formData]);
 }
 
-export async function adminGroupAddPlayerToTeam(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const formMatchId = Number(formData.get("matchId"));
-  const match = formMatchId
-    ? (await db.select().from(matches).where(eq(matches.id, formMatchId)).limit(1))[0]
-    : await getCurrentMatch(groupId);
-  if (!match) return;
-  const playerId = Number(formData.get("playerId"));
-  if (!playerId) return;
-  const team = String(formData.get("team")) === "B" ? "B" : "A";
-
-  const already = (
-    await db
-      .select({ id: teams.id })
-      .from(teams)
-      .where(and(eq(teams.matchId, match.id), eq(teams.playerId, playerId)))
-      .limit(1)
-  )[0];
-
-  if (already) {
-    await db.update(teams).set({ team }).where(eq(teams.id, already.id));
-  } else {
-    await db.insert(teams).values({
-      matchId: match.id,
-      team,
-      playerId,
-      isGuest: false,
-    });
-  }
-  refreshGroup(groupSlug);
+export async function adminGroupAddGuest(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupAddGuest", [formData]);
 }
 
-export async function adminGroupAddGuest(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const formMatchId = Number(formData.get("matchId"));
-  const match = formMatchId
-    ? (await db.select().from(matches).where(eq(matches.id, formMatchId)).limit(1))[0]
-    : await getCurrentMatch(groupId);
-  if (!match) return;
-  const name = String(formData.get("name") || "").trim();
-  if (!name) return;
-  const team = String(formData.get("team")) === "B" ? "B" : "A";
-  const stars = String(formData.get("stars") || "3");
-
-  const inserted = await db
-    .insert(players)
-    .values({ name, stars, isGuest: true, isHistorico: false, priorityOrder: 999 })
-    .returning();
-  await db.insert(teams).values({
-    matchId: match.id,
-    team,
-    playerId: inserted[0].id,
-    isGuest: true,
-  });
-  refreshGroup(groupSlug);
+export async function adminGroupPushTeams(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupPushTeams", [formData]);
 }
 
-export async function adminGroupPushTeams(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  await pushToAll({
-    title: "¡Ya están los equipos! ⚽",
-    body: "Mirá la formación en la app.",
-    url: `/grupos/${groupSlug}/equipos`,
-    tag: `equipos-${groupSlug}`,
-  });
-  refreshGroup(groupSlug);
+export async function adminGroupSaveResult(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupSaveResult", [formData]);
 }
 
-// ─── Resultado ────────────────────────────────────────────────────────────
-export async function adminGroupSaveResult(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const formMatchId = Number(formData.get("matchId"));
-  const match = formMatchId
-    ? (await db.select().from(matches).where(eq(matches.id, formMatchId)).limit(1))[0]
-    : await getCurrentMatch(groupId);
-  if (!match) return;
-
-  const oldStandings = await getStandings(groupId);
-  const oldStats = await getAdvancedStats(groupId);
-
-  const scoreA = Number(formData.get("scoreA") || 0);
-  const scoreB = Number(formData.get("scoreB") || 0);
-  const notes = String(formData.get("notes") || "").trim() || null;
-  const result = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
-
-  const existing = (
-    await db.select().from(results).where(eq(results.matchId, match.id)).limit(1)
-  )[0];
-
-  if (existing) {
-    await db
-      .update(results)
-      .set({ scoreA, scoreB, result, notes })
-      .where(eq(results.id, existing.id));
-  } else {
-    await db.insert(results).values({ matchId: match.id, scoreA, scoreB, result, notes });
-  }
-
-  const teamRows = await db
-    .select()
-    .from(teams)
-    .where(and(eq(teams.matchId, match.id), eq(teams.isGuest, false)));
-  await db.delete(attendanceLog).where(eq(attendanceLog.matchId, match.id));
-  const att = teamRows
-    .filter((t) => t.playerId)
-    .map((t) => ({ playerId: t.playerId as number, matchId: match.id, attended: true }));
-  if (att.length) await db.insert(attendanceLog).values(att);
-
-  const wasAlreadyFinished = match.status === "finished";
-  await db.update(matches).set({ status: "finished" }).where(eq(matches.id, match.id));
-
-  if (!wasAlreadyFinished) {
-    const { groups } = await import("@/db/schema");
-    const groupRow = (
-      await db.select().from(groups).where(eq(groups.id, groupId)).limit(1)
-    )[0];
-    const teamAName = match.teamAName || groupRow?.teamAName || "Claro";
-    const teamBName = match.teamBName || groupRow?.teamBName || "Oscuro";
-
-    await notifyMatchCompletionAndAchievements({
-      matchId: match.id,
-      groupId,
-      groupSlug,
-      scoreA,
-      scoreB,
-      notes,
-      oldStandings,
-      oldStats,
-      teamAName,
-      teamBName,
-    });
-  }
-
-  // Guardar goles y asistencias si se incluyeron en el formulario
-  const goalsEntries: { playerId: number; goals: number; assists: number }[] = [];
-  for (const [key, val] of formData.entries()) {
-    if (key.startsWith("goals_")) {
-      const pid = Number(key.replace("goals_", ""));
-      const goals = Number(val || 0);
-      const assists = Number(formData.get(`assists_${pid}`) || 0);
-      if (pid && (goals > 0 || assists > 0)) {
-        goalsEntries.push({ playerId: pid, goals, assists });
-      }
-    }
-  }
-  if (goalsEntries.length > 0) {
-    try {
-      await saveMatchGoals(match.id, goalsEntries);
-    } catch (err) {
-      console.warn("Could not save match goals:", err);
-    }
-  }
-
-  try {
-    await regenerateAllGroupComments(groupId, match.id);
-  } catch (err) {
-    console.error("Error regenerating player comments after match:", err);
-  }
-
-  refreshGroup(groupSlug);
-  redirect(`/grupos/${groupSlug}/admin/resultado?saved=1&matchId=${match.id}`);
+export async function adminGroupSaveSettings(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupSaveSettings", [formData]);
 }
 
-// ─── Configuración del grupo ──────────────────────────────────────────────
-export async function adminGroupSaveSettings(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const { groups } = await import("@/db/schema");
-
-  const name = String(formData.get("name") || "").trim();
-  const format = String(formData.get("format") || "F5");
-  const defaultCapacity = Number(formData.get("defaultCapacity")) || 10;
-  const rawDay = formData.get("defaultDayOfWeek");
-  const defaultDayOfWeek = rawDay !== "" && rawDay !== null && rawDay !== undefined
-    ? parseInt(String(rawDay), 10)
-    : null;
-  const defaultTime = String(formData.get("defaultTime") || "21:00").trim();
-  const ptsWin = Number(formData.get("ptsWin") ?? 3);
-  const ptsDraw = Number(formData.get("ptsDraw") ?? 2);
-  const ptsLoss = Number(formData.get("ptsLoss") ?? 1);
-  const teamAName = String(formData.get("teamAName") || "Claro").trim();
-  const teamBName = String(formData.get("teamBName") || "Oscuro").trim();
-  const adminNotifyPreference = String(formData.get("adminNotifyPreference") || "both").trim();
-
-  await db
-    .update(groups)
-    .set({
-      ...(name ? { name } : {}),
-      format,
-      defaultCapacity,
-      defaultDayOfWeek,
-      defaultTime,
-      ptsWin,
-      ptsDraw,
-      ptsLoss,
-      teamAName,
-      teamBName,
-      adminNotifyPreference,
-    })
-    .where(eq(groups.id, groupId));
-
-  refreshGroup(groupSlug);
-  redirect(`/grupos/${groupSlug}/admin/configuracion?saved=1`);
+export async function adminGroupManualPush(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupManualPush", [formData]);
 }
 
-// ─── Push manual y Alertas Pre/Post Partido ───────────────────────────────
-export async function adminGroupManualPush(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const message = String(formData.get("message") || "").trim();
-  if (!message) return;
-  await pushToGroupMembers(groupId, {
-    title: "Aviso de administración ⚽",
-    body: message,
-    url: `/grupos/${groupSlug}`,
-    tag: `manual-${groupSlug}`,
-  });
-  refreshGroup(groupSlug);
+export async function adminSendPreMatch24hReminder(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminSendPreMatch24hReminder", [formData]);
 }
 
-export async function adminSendPreMatch24hReminder(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  const matchId = Number(formData.get("matchId"));
-  await requireGroupAdmin(groupId);
-
-  const { groups } = await import("@/db/schema");
-  const grp = (await db.select().from(groups).where(eq(groups.id, groupId)).limit(1))[0];
-  const match = matchId
-    ? (await db.select().from(matches).where(eq(matches.id, matchId)).limit(1))[0]
-    : await getCurrentMatch(groupId);
-
-  if (!match) return;
-
-  const activeSignups = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(signups)
-    .where(and(eq(signups.matchId, match.id), eq(signups.withdrawn, false)));
-  const signedCount = Number(activeSignups[0]?.count ?? 0);
-
-  await pushToGroupMembers(groupId, {
-    title: `⏰ ¡Confirmá tu asistencia en ${grp?.name || "el partido"}!`,
-    body: `Falta poco para el partido (${formatArt(match.matchDate, "EEEE HH:mm")}). Hay ${signedCount}/${match.capacity} anotados. ¡Confirmá o avisá con tiempo para que no falte uno a último momento!`,
-    url: `/grupos/${groupSlug}`,
-    tag: `pre-24h-${match.id}`,
-  });
-
-  refreshGroup(groupSlug);
-  redirect(`/grupos/${groupSlug}/admin/partido?matchId=${match.id}&reminded24h=1`);
+export async function adminSendPostMatchVoteReminder(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminSendPostMatchVoteReminder", [formData]);
 }
 
-export async function adminSendPostMatchVoteReminder(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  const matchId = Number(formData.get("matchId"));
-  await requireGroupAdmin(groupId);
-
-  const { groups } = await import("@/db/schema");
-  const grp = (await db.select().from(groups).where(eq(groups.id, groupId)).limit(1))[0];
-  const match = matchId
-    ? (await db.select().from(matches).where(eq(matches.id, matchId)).limit(1))[0]
-    : await getCurrentMatch(groupId);
-
-  if (!match) return;
-
-  await pushToGroupMembers(groupId, {
-    title: `🗳️ ¡Calificá a tus compañeros en ${grp?.name || "el partido"}!`,
-    body: `Ya terminó la fecha. Entrá a votar al MVP de la fecha ⭐ y al Burro de la fecha 🫏.`,
-    url: `/partido/${match.id}`,
-    tag: `post-vote-${match.id}`,
-  });
-
-  refreshGroup(groupSlug);
-  redirect(`/grupos/${groupSlug}/admin/resultado?matchId=${match.id}&remindedVote=1`);
+export async function adminGroupUpdatePlayer(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupUpdatePlayer", [formData]);
 }
 
-// ─── Jugadores del grupo ──────────────────────────────────────────────────
-export async function adminGroupUpdatePlayer(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const id = Number(formData.get("id"));
-  if (!id) return;
-  const name = String(formData.get("name") || "").trim();
-  const rawEmail = String(formData.get("email") || "").trim();
-  const email = rawEmail ? rawEmail.toLowerCase() : null;
-  const stars = String(formData.get("stars") ?? "0");
-  const preferredPosition = String(formData.get("preferredPosition") || "MED");
-  const preferredFoot = String(formData.get("preferredFoot") || "R");
-  const rawPriority = formData.get("priorityOrder");
-  const priorityOrder = rawPriority !== null && rawPriority !== "" ? Number(rawPriority) : 999;
-
-  await db
-    .update(players)
-    .set({
-      ...(name ? { name } : {}),
-      stars,
-      isHistorico: formData.get("isHistorico") === "on",
-      isGoalkeeper: formData.get("isGoalkeeper") === "on",
-      preferredPosition,
-      preferredFoot,
-      priorityOrder,
-      email,
-    })
-    .where(eq(players.id, id));
-  refreshGroup(groupSlug);
+export async function adminGroupSetStars(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupSetStars", [formData]);
 }
 
-export async function adminGroupSetStars(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const id = Number(formData.get("id"));
-  const stars = String(formData.get("stars") ?? "0");
-  if (!id) return;
-  await db.update(players).set({ stars }).where(eq(players.id, id));
-  refreshGroup(groupSlug);
+export async function adminGroupCreateAndAddMember(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupCreateAndAddMember", [formData]);
 }
 
-export async function adminGroupCreateAndAddMember(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const name = String(formData.get("name") || "").trim();
-  if (!name) return;
-  const rawEmail = String(formData.get("email") || "").trim();
-  const email = rawEmail ? rawEmail.toLowerCase() : null;
-  const stars = String(formData.get("stars") || "3");
-  const isGoalkeeper = formData.get("isGoalkeeper") === "on";
-  const preferredPosition = String(formData.get("preferredPosition") || (isGoalkeeper ? "GK" : "MED"));
-  const preferredFoot = String(formData.get("preferredFoot") || "R");
-
-  const { groupMembers } = await import("@/db/schema");
-
-  let targetPlayerId: number | null = null;
-
-  // Si se ingresó correo, buscar si ya existe un jugador registrado con ese correo
-  if (email) {
-    const existing = (
-      await db
-        .select({ id: players.id })
-        .from(players)
-        .where(sql`lower(${players.email}) = ${email}`)
-        .limit(1)
-    )[0];
-    if (existing) {
-      targetPlayerId = existing.id;
-    }
-  }
-
-  if (targetPlayerId) {
-    // Ya existe: vincular como miembro activo de este grupo sin duplicar registro
-    await db
-      .insert(groupMembers)
-      .values({
-        groupId,
-        playerId: targetPlayerId,
-        role: "member",
-        status: "active",
-      })
-      .onConflictDoUpdate({
-        target: [groupMembers.groupId, groupMembers.playerId],
-        set: { status: "active" },
-      });
-  } else {
-    // No existe: crear jugador con nombre y correo, y sumarlo al grupo
-    const inserted = await db
-      .insert(players)
-      .values({
-        name,
-        stars,
-        isGoalkeeper,
-        preferredPosition,
-        preferredFoot,
-        isGuest: false,
-        isHistorico: false,
-        priorityOrder: 99,
-        email,
-      })
-      .returning();
-
-    await db.insert(groupMembers).values({
-      groupId,
-      playerId: inserted[0].id,
-      role: "member",
-      status: "active",
-    });
-  }
-
-  refreshGroup(groupSlug);
+export async function adminGroupSavePlayerComment(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupSavePlayerComment", [formData]);
 }
 
-export async function adminGroupSavePlayerComment(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const playerId = Number(formData.get("playerId"));
-  const comment = String(formData.get("comment") || "").trim();
-  if (!playerId || !comment) return;
-
-  await savePlayerComment(groupId, playerId, comment);
-  refreshGroup(groupSlug);
+export async function adminGroupRegenerateComments(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupRegenerateComments", [formData]);
 }
 
-export async function adminGroupRegenerateComments(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  await regenerateAllGroupComments(groupId);
-  refreshGroup(groupSlug);
+export async function adminGroupSavePaymentConfig(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupSavePaymentConfig", [formData]);
 }
 
-// ─── Pagos del partido ────────────────────────────────────────────────────
-export async function adminGroupSavePaymentConfig(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const matchId = Number(formData.get("matchId"));
-  const totalPrice = Math.max(0, parseInt(String(formData.get("totalPrice") || "0"), 10) || 0);
-  const paymentAlias = String(formData.get("paymentAlias") || "").trim() || null;
-  const notes = String(formData.get("notes") || "").trim() || null;
-
-  if (!matchId) return;
-  await saveMatchPaymentConfig({ matchId, totalPrice, paymentAlias, notes });
-  refreshGroup(groupSlug);
+export async function adminGroupTogglePlayerPaid(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupTogglePlayerPaid", [formData]);
 }
 
-export async function adminGroupTogglePlayerPaid(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const matchId = Number(formData.get("matchId"));
-  const playerId = Number(formData.get("playerId"));
-  const paid = formData.get("paid") === "true";
-
-  if (!matchId || !playerId) return;
-  await adminTogglePlayerPaid(matchId, playerId, paid);
-  refreshGroup(groupSlug);
+export async function adminGroupResetPassword(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupResetPassword", [formData]);
 }
 
-// ─── Claves / Credenciales ────────────────────────────────────────────────
-export async function adminGroupResetPassword(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const playerId = Number(formData.get("playerId"));
-  const newPassword = String(formData.get("newPassword") || "").trim();
-
-  if (!playerId || !newPassword) return;
-  await adminResetPlayerPassword(playerId, newPassword);
-  refreshGroup(groupSlug);
+export async function adminGroupSaveMatchGoals(formData: FormData): Promise<void> {
+  await callRpc<void>("group-admin", "adminGroupSaveMatchGoals", [formData]);
 }
-
-// ─── Goles del partido ────────────────────────────────────────────────────
-export async function adminGroupSaveMatchGoals(formData: FormData) {
-  const groupId = Number(formData.get("groupId"));
-  const groupSlug = String(formData.get("groupSlug"));
-  await requireGroupAdmin(groupId);
-
-  const matchId = Number(formData.get("matchId"));
-  if (!matchId) return;
-
-  const entries: { playerId: number; goals: number; assists: number }[] = [];
-  for (const [key, val] of formData.entries()) {
-    if (key.startsWith("goals_")) {
-      const pid = Number(key.replace("goals_", ""));
-      const goals = Number(val || 0);
-      const assists = Number(formData.get(`assists_${pid}`) || 0);
-      if (pid && (goals > 0 || assists > 0)) {
-        entries.push({ playerId: pid, goals, assists });
-      }
-    }
-  }
-
-  await saveMatchGoals(matchId, entries);
-  refreshGroup(groupSlug);
-}
-

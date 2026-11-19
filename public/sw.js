@@ -1,7 +1,7 @@
 /* Service Worker — FulboMundial
    Maneja caché básica offline (requerida por PWABuilder / Google Play TWA) y notificaciones push. */
 
-const CACHE_NAME = "fulbomundial-v2";
+const CACHE_NAME = "fulbomundial-v3";
 const PRECACHE_URLS = [
   "/manifest.json",
   "/icons/icon-192.png",
@@ -36,6 +36,9 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  // Nunca interceptar ni cachear llamadas a la API / RPC / Auth
+  if (url.pathname.startsWith("/api/") || url.hostname.startsWith("api.")) return;
 
   // Para recursos estáticos (íconos, manifest), estrategia Cache-First con actualización
   if (PRECACHE_URLS.includes(url.pathname)) {

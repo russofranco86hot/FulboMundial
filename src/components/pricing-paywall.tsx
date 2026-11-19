@@ -12,6 +12,7 @@ import {
   Zap,
   MessageCircle,
 } from "lucide-react";
+import { apiFetch } from "@/lib/client-api";
 import {
   PRO_PLANS,
   PRO_FEATURES_COMPARISON,
@@ -45,7 +46,7 @@ export function PricingPaywall({
     setErrorMsg(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/billing/checkout", {
+      const res = await apiFetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

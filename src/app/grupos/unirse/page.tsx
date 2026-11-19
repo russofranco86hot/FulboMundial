@@ -1,27 +1,39 @@
-import { redirect } from "next/navigation";
-import { getSessionUser, getCurrentPlayer } from "@/lib/session";
-import { getGroupByInviteCode } from "@/lib/groups";
-import { actionRequestJoin } from "../actions";
+"use client";
+
+import { Suspense, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Hash, Shield } from "lucide-react";
+import { actionRequestJoin } from "../actions";
+import { useApiData } from "@/lib/client-api";
 
-export const dynamic = "force-dynamic";
+type UnirseData = {
+  authRequired?: boolean;
+  invitedGroup?: { id: number; name: string; format: string } | null;
+};
 
-export default async function UnirsePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ code?: string; error?: string }>;
-}) {
-  const params = await searchParams;
-  const cleanCode = params.code ? params.code.trim().toUpperCase() : "";
-  const user = await getSessionUser();
-  if (!user) {
-    const callback = cleanCode ? `/grupos/unirse?code=${cleanCode}` : "/grupos/unirse";
-    redirect(`/login?callbackUrl=${encodeURIComponent(callback)}`);
+function UnirseContent() {
+  const searchParams = useSearchParams();
+  const rawCode = searchParams.get("code") || "";
+  const cleanCode = rawCode.trim().toUpperCase();
+  const errorMsg = searchParams.get("error");
+
+  const { data, loading } = useApiData<UnirseData>(
+    `/api/page-data/unirse?code=${encodeURIComponent(cleanCode)}`
+  );
+
+  useEffect(() => {
+    if (data?.authRequired) {
+      const callback = cleanCode ? `/grupos/unirse?code=${cleanCode}` : "/grupos/unirse";
+      window.location.replace(`/login?callbackUrl=${encodeURIComponent(callback)}`);
+    }
+  }, [data?.authRequired, cleanCode]);
+
+  if ((loading && !data) || data?.authRequired) {
+    return <div className="pt-12 text-center text-sm text-zinc-500">Verificando invitación...</div>;
   }
 
-  await getCurrentPlayer();
-  const invitedGroup = cleanCode ? await getGroupByInviteCode(cleanCode) : null;
+  const invitedGroup = data?.invitedGroup ?? null;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -52,9 +64,9 @@ export default async function UnirsePage({
         </div>
       )}
 
-      {params.error && (
+      {errorMsg && (
         <div className="card bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm p-3 rounded-xl">
-          {params.error}
+          {errorMsg}
         </div>
       )}
 
@@ -101,5 +113,13 @@ export default async function UnirsePage({
         El admin del grupo deberá aprobar tu solicitud para que puedas acceder.
       </p>
     </div>
+  );
+}
+
+export default function UnirsePage() {
+  return (
+    <Suspense fallback={<div className="pt-12 text-center text-sm text-zinc-500">Cargando...</div>}>
+      <UnirseContent />
+    </Suspense>
   );
 }

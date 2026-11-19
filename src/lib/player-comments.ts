@@ -1,4 +1,3 @@
-import "server-only";
 import { db, players, groups, matches, teams } from "@/db";
 import { and, eq, sql } from "drizzle-orm";
 import { getStandings } from "@/lib/queries";

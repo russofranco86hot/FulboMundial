@@ -5,8 +5,9 @@
   "compatibility_date": "2025-04-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {
-    "directory": ".open-next/assets",
-    "binding": "ASSETS"
+    "directory": "./out",
+    "binding": "ASSETS",
+    "html_handling": "drop-trailing-slash"
   },
   "observability": { "enabled": true },
   // Reemplazan a vercel.json "crons" (horarios en UTC, igual que en Vercel)

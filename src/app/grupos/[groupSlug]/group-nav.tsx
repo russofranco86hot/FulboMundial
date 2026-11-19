@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Users, Trophy, TrendingUp, Settings, ChevronLeft } from "lucide-react";
-import type { Group } from "@/db/schema";
 
 interface GroupNavProps {
-  group: Group;
+  group: { name: string; slug: string; format: string };
   role: "admin" | "member";
   isSuperAdmin?: boolean;
 }

@@ -1,4 +1,3 @@
-import "server-only";
 import crypto from "crypto";
 import { db, groups, subscriptionTransactions, type Group } from "@/db";
 import { eq, sql } from "drizzle-orm";

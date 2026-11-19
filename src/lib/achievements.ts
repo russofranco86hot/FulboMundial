@@ -1,4 +1,3 @@
-import "server-only";
 import { pushToGroupMembers, pushToAll, pushToPlayer } from "./push";
 import { getStandings, type StandingRow } from "./queries";
 import { getAdvancedStats } from "./stats";

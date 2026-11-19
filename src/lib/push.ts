@@ -1,4 +1,3 @@
-import "server-only";
 import webpush from "web-push";
 import { db, pushSubscriptions, groupMembers } from "@/db";
 import { and, eq, inArray } from "drizzle-orm";

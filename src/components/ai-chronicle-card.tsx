@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { apiFetch } from "@/lib/client-api";
 import {
   Sparkles,
   VolumeX,
@@ -164,7 +165,7 @@ export function AIChronicleCard({
       setLoading(true);
       stopAudio();
 
-      const res = await fetch("/api/chronicle", {
+      const res = await apiFetch("/api/chronicle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -205,7 +206,7 @@ export function AIChronicleCard({
     setLoadingAudio(true);
 
     try {
-      const res = await fetch("/api/chronicle/tts", {
+      const res = await apiFetch("/api/chronicle/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: script, style }),

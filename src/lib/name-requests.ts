@@ -1,4 +1,3 @@
-import "server-only";
 
 import { db, nameChangeRequests, players, groupMembers } from "@/db";
 import { and, eq, sql } from "drizzle-orm";

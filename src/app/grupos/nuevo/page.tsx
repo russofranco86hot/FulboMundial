@@ -1,21 +1,26 @@
-import { redirect } from "next/navigation";
-import { getSessionUser, getCurrentPlayer } from "@/lib/session";
-import { actionCreateGroup } from "../actions";
+"use client";
+
+import { Suspense, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { actionCreateGroup } from "../actions";
+import { useApiData } from "@/lib/client-api";
 
-export default async function NuevoGrupoPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ error?: string }>;
-}) {
-  const user = await getSessionUser();
-  if (!user) redirect(`/login?callbackUrl=${encodeURIComponent("/grupos/nuevo")}`);
+function NuevoGrupoContent() {
+  const searchParams = useSearchParams();
+  const errorMsg = searchParams.get("error");
+  const { data, loading } = useApiData<{ user: unknown; player: unknown }>("/api/page-data/header");
 
-  const player = await getCurrentPlayer();
-  if (!player) redirect(`/login?callbackUrl=${encodeURIComponent("/grupos/nuevo")}`);
+  useEffect(() => {
+    if (!loading && data && (!data.user || !data.player)) {
+      window.location.replace(`/login?callbackUrl=${encodeURIComponent("/grupos/nuevo")}`);
+    }
+  }, [data, loading]);
 
-  const params = searchParams ? await searchParams : {};
+  if (loading && !data) {
+    return <div className="pt-12 text-center text-sm text-zinc-500">Cargando...</div>;
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -29,9 +34,9 @@ export default async function NuevoGrupoPage({
         </div>
       </div>
 
-      {params.error && (
+      {errorMsg && (
         <div className="card bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm p-3 rounded-xl">
-          {params.error}
+          {errorMsg}
         </div>
       )}
 
@@ -134,5 +139,13 @@ export default async function NuevoGrupoPage({
         </button>
       </form>
     </div>
+  );
+}
+
+export default function NuevoGrupoPage() {
+  return (
+    <Suspense fallback={<div className="pt-12 text-center text-sm text-zinc-500">Cargando...</div>}>
+      <NuevoGrupoContent />
+    </Suspense>
   );
 }

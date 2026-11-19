@@ -1,24 +1,55 @@
-import { redirect } from "next/navigation";
-import { getSessionUser, getCurrentPlayer, getPlayerGroups } from "@/lib/session";
-import { GoogleSignInButton } from "@/components/auth-buttons";
-import { getCurrentMatch } from "@/lib/queries";
-import { getPlayerComment } from "@/lib/player-comments";
-import { TuMomentoMarquee } from "@/components/tu-momento-marquee";
-import { formatArt } from "@/lib/time";
+"use client";
+
 import Link from "next/link";
-import { PlusCircle, LogIn, ChevronRight, Calendar, Users, Shield, User, Crown } from "lucide-react";
-import { db, matches, results, groups } from "@/db";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { ensureDbUpgrades, ensureAdminNotifyPreferenceColumn } from "@/lib/db-migrations";
-import { isSuperAdmin } from "@/lib/superadmin";
-import { isGroupPro } from "@/lib/billing";
+import { PlusCircle, LogIn, ChevronRight, Calendar, Shield, User, Crown } from "lucide-react";
+import { GoogleSignInButton } from "@/components/auth-buttons";
+import { TuMomentoMarquee, type TuMomentoItem } from "@/components/tu-momento-marquee";
+import { formatArt } from "@/lib/time";
+import { useApiData } from "@/lib/client-api";
 
-export const dynamic = "force-dynamic";
+type GroupItem = {
+  id: number;
+  name: string;
+  slug: string;
+  format: string;
+  defaultDayOfWeek: number | null;
+  defaultTime: string | null;
+  role: "admin" | "member";
+  proActive: boolean;
+};
 
-export default async function GruposPage() {
-  await ensureDbUpgrades();
-  await ensureAdminNotifyPreferenceColumn();
-  const user = await getSessionUser();
+type OpenMatchItem = {
+  id: number;
+  groupId: number | null;
+  matchDate: string | Date;
+  status: "open" | "closed" | "finished";
+  capacity: number;
+  format: string;
+};
+
+type GruposPageData = {
+  user: { name?: string | null; email?: string | null } | null;
+  player: { id: number; name: string; isGoalkeeper: boolean } | null;
+  superAdmin?: boolean;
+  playerGroups?: GroupItem[];
+  validComments?: TuMomentoItem[];
+  openMatchByGroup?: Record<number, OpenMatchItem>;
+};
+
+export default function GruposPage() {
+  const { data, loading } = useApiData<GruposPageData>("/api/page-data/grupos");
+
+  if (loading && !data) {
+    return (
+      <div className="space-y-4 pt-10 animate-pulse">
+        <div className="h-8 w-40 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+        <div className="h-28 rounded-2xl bg-zinc-200 dark:bg-zinc-800" />
+        <div className="h-24 rounded-2xl bg-zinc-200 dark:bg-zinc-800" />
+      </div>
+    );
+  }
+
+  const user = data?.user ?? null;
 
   if (!user) {
     return (
@@ -45,9 +76,8 @@ export default async function GruposPage() {
     );
   }
 
-  const player = await getCurrentPlayer();
+  const player = data?.player ?? null;
 
-  // Logueado pero sin jugador vinculado → necesita crear su perfil
   if (!player) {
     return (
       <div className="space-y-6 pt-10 animate-fade-in">
@@ -71,60 +101,10 @@ export default async function GruposPage() {
     );
   }
 
-  const [playerGroups, superAdmin] = await Promise.all([
-    getPlayerGroups(),
-    isSuperAdmin(),
-  ]);
-
-  const groupIds = playerGroups.map((g) => g.id);
-
-  const [commentsResults, openMatchesRows] =
-    groupIds.length > 0
-      ? await Promise.all([
-          Promise.all(
-            playerGroups.map(async (g) => {
-              try {
-                const comment = await getPlayerComment(g.id, player.id, {
-                  playerName: player.name,
-                  isGoalkeeper: player.isGoalkeeper,
-                });
-                return {
-                  groupId: g.id,
-                  groupName: g.name,
-                  groupSlug: g.slug,
-                  comment,
-                };
-              } catch {
-                return null;
-              }
-            })
-          ),
-          db
-            .select({
-              id: matches.id,
-              groupId: matches.groupId,
-              matchDate: matches.matchDate,
-              status: matches.status,
-              capacity: matches.capacity,
-              format: matches.format,
-            })
-            .from(matches)
-            .where(and(inArray(matches.groupId, groupIds), sql`${matches.status} <> 'finished'`))
-            .orderBy(matches.matchDate),
-        ])
-      : [[], []];
-
-  const validComments = commentsResults.filter(
-    (c): c is { groupId: number; groupName: string; groupSlug: string; comment: string } =>
-      Boolean(c && c.comment && c.comment.trim())
-  );
-
-  const openMatchByGroup = new Map<number, (typeof openMatchesRows)[0]>();
-  for (const m of openMatchesRows) {
-    if (m.groupId && !openMatchByGroup.has(m.groupId)) {
-      openMatchByGroup.set(m.groupId, m);
-    }
-  }
+  const playerGroups = data?.playerGroups ?? [];
+  const superAdmin = Boolean(data?.superAdmin);
+  const validComments = data?.validComments ?? [];
+  const openMatchByGroup = data?.openMatchByGroup ?? {};
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -182,7 +162,7 @@ export default async function GruposPage() {
               <GroupCard
                 key={group.id}
                 group={group}
-                openMatch={openMatchByGroup.get(group.id) ?? null}
+                openMatch={openMatchByGroup[group.id] ?? null}
               />
             ))}
           </div>
@@ -205,17 +185,9 @@ function GroupCard({
   group,
   openMatch,
 }: {
-  group: Awaited<ReturnType<typeof getPlayerGroups>>[0];
-  openMatch: {
-    id: number;
-    matchDate: Date;
-    status: "open" | "closed" | "finished";
-    capacity: number;
-    format: string;
-  } | null;
+  group: GroupItem;
+  openMatch: OpenMatchItem | null;
 }) {
-  const proActive = isGroupPro(group);
-
   return (
     <Link
       href={`/grupos/${group.slug}`}
@@ -226,7 +198,7 @@ function GroupCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="font-bold text-pitch-700 dark:text-zinc-100 truncate">{group.name}</h2>
-            {proActive && (
+            {group.proActive && (
               <span className="chip bg-gradient-to-r from-amber-400 to-yellow-300 text-zinc-950 text-[10px] font-black px-2 py-0.5 shrink-0 flex items-center gap-1 shadow-2xs">
                 <Crown size={10} /> PRO
               </span>
@@ -243,7 +215,9 @@ function GroupCard({
             </span>
             {group.defaultTime && (
               <span className="text-xs text-pitch-900/50 dark:text-zinc-500">
-                {group.defaultDayOfWeek !== null && ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][group.defaultDayOfWeek ?? 0]} {group.defaultTime}
+                {group.defaultDayOfWeek !== null &&
+                  ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"][group.defaultDayOfWeek ?? 0]}{" "}
+                {group.defaultTime}
               </span>
             )}
           </div>
@@ -259,7 +233,11 @@ function GroupCard({
               {formatArt(openMatch.matchDate, "EEE dd/MM 'a las' HH:mm")}
             </span>
           </div>
-          <span className={`chip text-xs ${openMatch.status === "open" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+          <span
+            className={`chip text-xs ${
+              openMatch.status === "open" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+            }`}
+          >
             {openMatch.status === "open" ? "Abierto" : "Cerrado"}
           </span>
         </div>

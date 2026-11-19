@@ -1,35 +1,39 @@
-import { getSessionUser } from "@/lib/session";
-import { getGroupByInviteCode } from "@/lib/groups";
-import { redirect } from "next/navigation";
+"use client";
+
+import { Suspense, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { LoginForm } from "./login-form";
+import { useApiData } from "@/lib/client-api";
 
-export const dynamic = "force-dynamic";
+type LoginPageData = {
+  authenticated?: boolean;
+  redirectTo?: string;
+  inviteCode?: string | null;
+  invitedGroup?: { id: number; name: string; format: string } | null;
+};
 
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ callbackUrl?: string; code?: string }>;
-}) {
-  const params = await searchParams;
-  const rawCallback = params.callbackUrl || (params.code ? `/grupos/unirse?code=${params.code}` : "/grupos");
+function LoginContent() {
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "";
+  const code = searchParams.get("code") || "";
+
+  const qs = new URLSearchParams();
+  if (callbackUrl) qs.set("callbackUrl", callbackUrl);
+  if (code) qs.set("code", code);
+
+  const rawCallback = callbackUrl || (code ? `/grupos/unirse?code=${code}` : "/grupos");
   const safeCallbackUrl = rawCallback.startsWith("/") ? rawCallback : "/grupos";
 
-  const user = await getSessionUser();
-  if (user) redirect(safeCallbackUrl);
+  const { data } = useApiData<LoginPageData>(`/api/page-data/login?${qs.toString()}`);
 
-  // Detectar si viene de un link de invitación con código (?code=XXXXXX)
-  let inviteCode: string | null = params.code ? params.code.trim().toUpperCase() : null;
-  if (!inviteCode && safeCallbackUrl.includes("code=")) {
-    try {
-      const urlObj = new URL(safeCallbackUrl, "https://fulbomundial.com.ar");
-      const codeParam = urlObj.searchParams.get("code");
-      if (codeParam) inviteCode = codeParam.trim().toUpperCase();
-    } catch {
-      // ignore
+  useEffect(() => {
+    if (data?.authenticated && data.redirectTo) {
+      window.location.replace(data.redirectTo);
     }
-  }
+  }, [data]);
 
-  const invitedGroup = inviteCode ? await getGroupByInviteCode(inviteCode) : null;
+  const inviteCode = data?.inviteCode ?? (code ? code.trim().toUpperCase() : null);
+  const invitedGroup = data?.invitedGroup ?? null;
 
   return (
     <div className="space-y-6 pt-8 pb-16 flex flex-col items-center max-w-md mx-auto">
@@ -59,5 +63,13 @@ export default async function LoginPage({
 
       <LoginForm callbackUrl={safeCallbackUrl} defaultMode={inviteCode ? "register" : "login"} />
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="pt-16 text-center text-sm text-zinc-500">Cargando...</div>}>
+      <LoginContent />
+    </Suspense>
   );
 }

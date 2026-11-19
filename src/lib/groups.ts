@@ -1,8 +1,7 @@
 /**
  * lib/groups.ts — helpers de creación y gestión de grupos.
  */
-import "server-only";
-import { cache } from "react";
+import { requestCache as cache } from "./request-context";
 import { db, groups, groupMembers, joinRequests, players, matches, type Group } from "@/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 

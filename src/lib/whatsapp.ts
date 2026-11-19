@@ -12,7 +12,7 @@ import { formatArt } from "./time";
 type SelLike = { name: string; status: "playing" | "substitute"; isGoalkeeper?: boolean };
 
 /** "¡Se abrió la lista!" para anotarse. */
-export function waOpenMessage(matchDate: Date, appUrl?: string): string {
+export function waOpenMessage(matchDate: Date | string, appUrl?: string): string {
   const cuando = formatArt(matchDate, "EEEE dd/MM");
   const lines = [
     "⚽ *Fútbol de los Miércoles*",
@@ -25,7 +25,7 @@ export function waOpenMessage(matchDate: Date, appUrl?: string): string {
 
 /** Lista actual de anotados: titulares + suplentes. */
 export function waListMessage(
-  matchDate: Date,
+  matchDate: Date | string,
   selection: SelLike[],
   appUrl?: string
 ): string {
@@ -52,7 +52,7 @@ export function waListMessage(
 
 /** Equipos ya sorteados. */
 export function waTeamsMessage(
-  matchDate: Date,
+  matchDate: Date | string,
   teamA: { name: string; isGoalkeeper?: boolean }[],
   teamB: { name: string; isGoalkeeper?: boolean }[],
   appUrl?: string,
@@ -79,7 +79,7 @@ export function waTeamsMessage(
 }
 
 /** Recordatorio del día del partido. */
-export function waReminderMessage(matchDate: Date): string {
+export function waReminderMessage(matchDate: Date | string): string {
   const cuando = formatArt(matchDate, "EEEE dd/MM HH:mm");
   return [
     "⚽ *Recordatorio*",

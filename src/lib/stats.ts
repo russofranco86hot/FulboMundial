@@ -1,5 +1,4 @@
-import "server-only";
-import { cache } from "react";
+import { requestCache as cache } from "./request-context";
 import { db, matches, results, teams, players } from "@/db";
 import { and, desc, eq, sql } from "drizzle-orm";
 

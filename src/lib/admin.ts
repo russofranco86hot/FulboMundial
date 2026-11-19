@@ -1,6 +1,5 @@
-import "server-only";
-import { cookies } from "next/headers";
 import crypto from "node:crypto";
+import { getRequestContext } from "./request-context";
 
 const COOKIE = "fm_admin";
 const MAX_AGE = 60 * 60 * 24 * 14; // 14 días
@@ -39,28 +38,29 @@ export function checkAdminPassword(input: string): boolean {
 export async function startAdminSession() {
   const exp = Date.now() + MAX_AGE * 1000;
   const token = sign(`admin:${exp}`);
-  const c = await cookies();
-  c.set(COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: MAX_AGE,
-  });
+  const ctx = getRequestContext();
+  if (ctx) {
+    const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+    ctx.setCookies.push(
+      `${COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MAX_AGE}${secure}`
+    );
+  }
 }
 
 export async function endAdminSession() {
-  const c = await cookies();
-  c.delete(COOKIE);
+  const ctx = getRequestContext();
+  if (ctx) {
+    ctx.setCookies.push(`${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  }
 }
 
 export async function isAdmin(): Promise<boolean> {
-  const c = await cookies();
-  const token = c.get(COOKIE)?.value;
+  const ctx = getRequestContext();
+  const token = ctx?.cookies[COOKIE];
   return !!token && verify(token);
 }
 
-/** Lanza si no es admin (para usar al inicio de server actions sensibles). */
+/** Lanza si no es admin (para usar al inicio de acciones sensibles). */
 export async function requireAdmin() {
   if (!(await isAdmin())) {
     throw new Error("No autorizado: se requiere sesión de admin.");

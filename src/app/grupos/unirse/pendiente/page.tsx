@@ -1,12 +1,13 @@
+"use client";
+
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Clock, Home } from "lucide-react";
 
-export default async function UnirsePendientePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ grupo?: string; nombre?: string }>;
-}) {
-  const params = await searchParams;
+function PendienteContent() {
+  const searchParams = useSearchParams();
+  const nombre = searchParams.get("nombre");
 
   return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-6 animate-fade-in text-center">
@@ -16,7 +17,7 @@ export default async function UnirsePendientePage({
         <p className="text-pitch-900/70 dark:text-zinc-400 max-w-xs">
           Tu solicitud para unirte a{" "}
           <strong className="text-pitch-700 dark:text-pitch-400">
-            {params.nombre ? decodeURIComponent(params.nombre) : "el grupo"}
+            {nombre ? decodeURIComponent(nombre) : "el grupo"}
           </strong>{" "}
           fue enviada. El admin la revisará pronto.
         </p>
@@ -33,5 +34,13 @@ export default async function UnirsePendientePage({
         <Home size={16} /> Volver al inicio
       </Link>
     </div>
+  );
+}
+
+export default function UnirsePendientePage() {
+  return (
+    <Suspense fallback={<div className="pt-12 text-center text-sm text-zinc-500">Cargando...</div>}>
+      <PendienteContent />
+    </Suspense>
   );
 }

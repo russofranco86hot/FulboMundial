@@ -1,0 +1,16 @@
+/*
+  X-DNS-Prefetch-Control: on
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), browsing-topics=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://sdk.mercadopago.com https://http2.mlstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://api.fulbomundial.com.ar https://accounts.google.com https://api.mercadopago.com https://api.stripe.com https://*.neon.tech; frame-src 'self' https://accounts.google.com https://js.stripe.com https://hooks.stripe.com https://www.mercadopago.com.ar https://www.mercadopago.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com https://www.mercadopago.com.ar https://checkout.stripe.com
+
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+  Service-Worker-Allowed: /
+
+/.well-known/assetlinks.json
+  Content-Type: application/json
+  Cache-Control: public, max-age=0, must-revalidate
